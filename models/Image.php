@@ -151,6 +151,27 @@ class Tigerimage_Model_Image extends Tiger_Model_Table
         return $moved;
     }
 
+
+    /**
+     * Total estimated spend for an org since a cutoff (TIGER-100).
+     *
+     * Counts DELETED rows too — binning an image does not refund it. A sum that fell when a user
+     * tidied up would let a loop reset its own budget by discarding as it went.
+     *
+     * @param  string $orgId
+     * @param  string $since 'Y-m-d H:i:s'
+     * @return float USD
+     */
+    public function spentSince($orgId, $since)
+    {
+        $row = $this->fetchRow(
+            $this->select()->from($this->_name, ['total' => 'COALESCE(SUM(cost), 0)'])
+                 ->where('org_id = ?', (string) $orgId)
+                 ->where('created_at >= ?', (string) $since)
+        );
+        return $row ? (float) $row->total : 0.0;
+    }
+
     /** Decode the stored params blob. @return array */
     public function paramsOf($row)
     {

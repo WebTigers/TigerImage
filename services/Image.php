@@ -37,6 +37,15 @@ class Tigerimage_Service_Image extends Tiger_Service_Service
     {
         $cap = Tigerimage_Model_Provider::capability();
         $cap['max_per_call'] = self::MAX_N;
+        $cap['spend']        = Tigerimage_Model_Spend::summary($this->_orgId());
+
+        // An agent must be able to learn it is out of budget WITHOUT spending anything to find out.
+        if (!empty($cap['available']) && $cap['spend']['remaining'] !== null && $cap['spend']['remaining'] <= 0
+            && $cap['spend']['enforce'] === 'hard') {
+            $cap['available'] = false;
+            $cap['reason']    = 'spend_cap_reached';
+            $cap['detail']    = 'The monthly image budget for this organisation is used up.';
+        }
         $this->_success($cap);
     }
 
@@ -56,6 +65,7 @@ class Tigerimage_Service_Image extends Tiger_Service_Service
         switch ((string) $reason) {
             case 'no_image_provider': return 'tigerimage.error.no_image_provider';
             case 'no_api_key':        return 'tigerimage.error.no_api_key';
+            case 'spend_cap_reached': return 'tigerimage.error.spend_cap_reached';
             default:                  return 'tigerimage.error.unavailable';
         }
     }
@@ -73,7 +83,7 @@ class Tigerimage_Service_Image extends Tiger_Service_Service
         $prompt = trim((string) ($params['prompt'] ?? ''));
         if ($prompt === '') { $this->_error('tigerimage.error.prompt_required'); return; }
 
-        $cap = Tigerimage_Model_Provider::capability();
+        $cap = $this->_capability();
         if (empty($cap['available'])) {
             // Hand back the REASON, not a generic failure — the agent's next sentence depends on it.
             // Mapped explicitly rather than concatenated: a built key means a NEW reason (a spend cap,
@@ -111,8 +121,24 @@ class Tigerimage_Service_Image extends Tiger_Service_Service
             }
         }
 
+        // BEFORE the provider is contacted. A cap discovered by going over it is not a cap, and the
+        // alternative to checking here is finding out from an invoice.
+        $estimate = Tigerimage_Model_Pricing::estimate(
+            $resolved['provider'], $resolved['model'], $options['n'], $options['size']
+        );
+        $spend = $this->_spendCheck($orgId, $estimate);
+        if (!$spend['allowed']) {
+            $this->_error('tigerimage.error.spend_cap_reached', [
+                'spent'     => $spend['spent'],
+                'cap'       => $spend['cap'],
+                'estimate'  => $estimate,
+                'remaining' => $spend['remaining'],
+            ]);
+            return;
+        }
+
         try {
-            $result = $adapter->generateImage($prompt, $options, $resolved['model'], Tigerimage_Model_Provider::apiKey($resolved));
+            $result = $adapter->generateImage($prompt, $options, $resolved['model'], $this->_apiKey($resolved));
         } catch (Throwable $e) {
             // A provider refusal (safety filter, bad prompt) is NOT a Tiger bug — pass the reason
             // through so the agent can tell the user what to change.
@@ -126,6 +152,11 @@ class Tigerimage_Service_Image extends Tiger_Service_Service
                 'prompt'    => $prompt,
                 'negative'  => $options['negative_prompt'] ?: null,
                 'parent_id' => $parent ? (string) $parent->image_id : null,
+                // Charge per image actually returned, not per image requested — a provider that gave
+                // us three when we asked for four should not bill the org for four.
+                'cost'      => Tigerimage_Model_Pricing::estimate(
+                    $resolved['provider'], $resolved['model'], count($result['images'] ?? []), $options['size']
+                ) / max(1, count($result['images'] ?? [1])),
             ]);
         } catch (Throwable $e) {
             $this->_error('tigerimage.error.store_failed', ['detail' => $e->getMessage()]);
@@ -136,6 +167,9 @@ class Tigerimage_Service_Image extends Tiger_Service_Service
             'images'   => $this->_describeMany($ids, $orgId),
             'provider' => $resolved['provider'],
             'model'    => $resolved['model'],
+            // Told after every generation, so a loop can see its own budget shrinking rather than
+            // discovering the ceiling by hitting it.
+            'spend'    => Tigerimage_Model_Spend::summary($orgId),
         ], 'tigerimage.generated');
     }
 
@@ -227,6 +261,32 @@ class Tigerimage_Service_Image extends Tiger_Service_Service
             return;
         }
         $this->_success($r, 'tigerimage.discarded');
+    }
+
+
+    /* ---- seams --------------------------------------------------------------------------------
+     * Two thin indirections so the cap-enforcement point can be tested without a live provider key.
+     * The guard between the capability check and the paid API call is the most consequential line in
+     * this class — "did we contact a billable endpoint" is the one property that costs money to get
+     * wrong — and it is worth being able to assert it in a unit test.
+     * ------------------------------------------------------------------------------------------ */
+
+    /** @return array the capability answer */
+    protected function _capability()
+    {
+        return Tigerimage_Model_Provider::capability();
+    }
+
+    /** @return string the provider key */
+    protected function _apiKey(array $resolved)
+    {
+        return Tigerimage_Model_Provider::apiKey($resolved);
+    }
+
+    /** @return array the spend decision — see Tigerimage_Model_Spend::check() */
+    protected function _spendCheck($orgId, $estimate)
+    {
+        return Tigerimage_Model_Spend::check($orgId, $estimate);
     }
 
     /* ---- helpers ---------------------------------------------------------------------------- */

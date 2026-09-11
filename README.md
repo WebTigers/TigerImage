@@ -37,10 +37,27 @@ the docroot and outside the swap path — the same place `storage/media` and `st
 | `tigerimage.storage.disk` | *(unset — a local filesystem disk)* |
 | `tigerimage.storage.root` | `storage/tigerimage` |
 | `tigerimage.retention_days` | `7` (unpromoted images only) |
+| `tigerimage.spend.monthly_cap` | *(unset — uncapped)* USD per org per calendar month |
+| `tigerimage.spend.enforce` | `hard` (refuse) · `soft` (allow and report) |
 
 > **Removing the module does not yet remove this directory.** Module purge currently reaches only the
 > module's own folder, tables and config rows — see TIGER-101, which makes "remove everything, cannot
 > be undone" true for module-owned storage.
+
+## Spend
+
+Image calls cost orders of magnitude more than text, and the point of this module is to let an **agent**
+issue them in a loop. So the cap is checked **before** the provider is contacted — a cap discovered by
+going over it is not a cap — and it is **hard by default**, because an agent does not read warnings.
+
+Costs are **estimates**, and say so. Providers do not return a price with an image and their published
+rates move. The figures exist to stop a runaway loop and show an operator where the money went, not to
+reconcile a bill. An unrecognised model is charged `UNKNOWN_COST`, never zero — otherwise a newly
+released model would be the one thing a cap cannot stop.
+
+> **Per-token ceilings are not possible yet.** A scoped MCP token handed to an agent can spend the whole
+> org budget, because `identityFromToken()` builds the identity from the *user* and never records which
+> credential authenticated. Enforcing a per-token limit needs that in core first.
 
 ## Tests
 
