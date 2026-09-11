@@ -21,7 +21,7 @@
     "mcp"
   ],
   "requires": {
-    "tiger": ">=1.5.16",
+    "tiger": ">=1.5.17",
     "php": ">=8.1"
   },
   "type": "plugin",

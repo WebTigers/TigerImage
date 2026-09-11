@@ -185,24 +185,48 @@ class Tigerimage_Service_Library extends Tiger_Service_Service
     }
 
     /**
-     * Hand the bytes to the Media module.
+     * Hand the bytes to the Media Library.
      *
      * Isolated so the coupling to Media is one method: TigerImage owns generation, Media owns the
      * library, and this is the seam between them.
+     *
+     * The FILE IS COPIED, not referenced. A media row whose storage_key pointed back into
+     * storage/tigerimage would break the moment the retention sweep ran or the image was binned —
+     * the library would hold a row for a file it does not own. Promotion means the Media Library now
+     * has its own copy, on its own disk, under its own visibility rules.
+     *
+     * Written PUBLIC: the point of promoting is to use the image on a page.
      */
     protected function _toMediaLibrary($row, $bytes, array $opts)
     {
-        $media = new Media_Model_Media();
-        return (string) $media->insert([
+        $ext      = Tigerimage_Model_Store::extensionFor((string) $row->mime);
+        $title    = trim((string) ($opts['title'] ?? '')) ?: $this->_titleFrom($row->prompt);
+        $slug     = trim(preg_replace('~[^a-z0-9]+~', '-', strtolower($title)), '-') ?: 'image';
+        $filename = substr($slug, 0, 60) . '.' . $ext;
+        $key      = gmdate('Y/m') . '/' . substr($slug, 0, 60) . '-' . bin2hex(random_bytes(4)) . '.' . $ext;
+
+        $disk = Tiger_Media_Storage::defaultDisk();
+        Tiger_Media_Storage::disk($disk)->write($key, $bytes, Tiger_Model_Media::VISIBILITY_PUBLIC, (string) $row->mime);
+
+        return (string) (new Tiger_Model_Media())->insert([
             'org_id'      => (string) $row->org_id,
-            'filename'    => basename((string) $row->path),
+            'locale'      => '',
+            'disk'        => $disk,
+            'storage_key' => $key,
+            'visibility'  => Tiger_Model_Media::VISIBILITY_PUBLIC,
+            'kind'        => 'image',
             'mime_type'   => (string) $row->mime,
-            'size'        => (int) $row->bytes,
+            'extension'   => $ext,
+            'file_size'   => strlen((string) $bytes),
+            'checksum'    => hash('sha256', (string) $bytes),
             'width'       => (int) $row->width,
             'height'      => (int) $row->height,
-            // Searchable by what it IS. The prompt is the best description anyone will write.
-            'title'       => (string) ($opts['title'] ?? $this->_titleFrom($row->prompt)),
-            'description' => (string) ($opts['alt'] ?? $row->prompt),
+            'filename'    => $filename,
+            'title'       => $title,
+            // Searchable by what it IS. The prompt is the best description anyone will write, and
+            // alt_text is an accessibility requirement rather than a nicety.
+            'caption'     => (string) $row->prompt,
+            'alt_text'    => trim((string) ($opts['alt'] ?? '')) ?: (string) $row->prompt,
         ]);
     }
 

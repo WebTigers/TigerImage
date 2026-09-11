@@ -22,6 +22,18 @@ Free, BSD-3, first-party.
   Without that echo a refinement cannot reproduce its parent.
 - **Lineage** links a refinement to what it came from, so a chain is navigable rather than a pile.
 
+## Installing
+
+Needs **tiger-core 1.5.17+** (the release carrying `Tiger_Agent_Provider_ImageAdapter`).
+
+App modules are **opt-in**: dropping the files in and running the migration is not enough — the module
+stays inert until it has an `active=1` row, because `Resource_Modules` strips inactive modules from the
+controller map. Activate it in the Module Manager. (`module:list` showing `[x]` reflects *discovery*,
+not activation.)
+
+`storage/tigerimage` must be writable by the **web** user, not just the account that installed it:
+`ec2-user:apache`, `2775` with the setgid bit so new files inherit the group.
+
 ## Storage
 
 Images live in **`storage/tigerimage/`** — local by default, offsite (S3, GCS, Azure) by config,
