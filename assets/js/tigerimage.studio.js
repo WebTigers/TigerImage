@@ -1,0 +1,204 @@
+/* SPDX-License-Identifier: BSD-3-Clause
+ * Copyright (c) 2026 WebTigers. Tiger™ and WebTigers™ are trademarks of WebTigers.
+ *
+ * The image studio (TIGER-98).
+ *
+ * Every mutation goes through /api — the same surface an agent uses — so the screen and the agent can
+ * never drift into describing the site differently. Nothing here talks to the database.
+ *
+ * No browser dialogs (house rule): confirmation is the in-app modal in the view.
+ */
+(function () {
+    'use strict';
+
+    var API  = '/api';
+    var grid = document.getElementById('ti-grid');
+    if (!grid) { return; }                       // unavailable state renders no grid
+
+    var form     = document.getElementById('ti-generate');
+    var empty    = document.getElementById('ti-empty');
+    var feedback = document.getElementById('ti-feedback');
+
+    /* ---- /api ---------------------------------------------------------------------------- */
+
+    function call(service, method, params) {
+        return fetch(API, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ module: 'tigerimage', service: service, method: method, params: params || {} })
+        }).then(function (r) { return r.json(); });
+    }
+
+    /** Show the message the service gave us. A named reason is more useful than "something failed". */
+    function say(res, fallback) {
+        var msg = (res && res.messages && res.messages.length) ? res.messages[0].message : fallback;
+        var ok  = res && res.result === 1;
+        feedback.innerHTML =
+            '<div class="alert alert-' + (ok ? 'success' : 'danger') + ' alert-dismissible fade show" role="alert">' +
+            escapeHtml(msg || '') +
+            '<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
+    }
+
+    function escapeHtml(s) {
+        return String(s === null || s === undefined ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    /* ---- the grid ------------------------------------------------------------------------ */
+
+    function tile(img) {
+        var promoted = img.state === 'promoted';
+        return '' +
+          '<div class="col" data-image-id="' + escapeHtml(img.image_id) + '">' +
+            '<div class="card h-100">' +
+              '<img class="card-img-top ti-thumb" loading="lazy" alt="' + escapeHtml(img.prompt) + '"' +
+                   ' src="/tigerimage/studio/raw/id/' + encodeURIComponent(img.image_id) + '">' +
+              '<div class="card-body p-2">' +
+                '<p class="small text-body-secondary text-truncate mb-2" title="' + escapeHtml(img.prompt) + '">' +
+                   escapeHtml(img.prompt) + '</p>' +
+                '<div class="d-flex gap-1 flex-wrap">' +
+                  '<button class="btn btn-sm btn-outline-secondary" data-act="detail">Details</button>' +
+                  '<button class="btn btn-sm btn-outline-primary" data-act="refine">Refine</button>' +
+                  (promoted
+                    ? '<span class="badge text-bg-success align-self-center">In Media</span>'
+                    : '<button class="btn btn-sm btn-primary" data-act="promote">Keep</button>' +
+                      '<button class="btn btn-sm btn-outline-danger" data-act="discard">Bin</button>') +
+                '</div>' +
+              '</div>' +
+            '</div>' +
+          '</div>';
+    }
+
+    function render(images) {
+        grid.innerHTML = images.map(tile).join('');
+        empty.classList.toggle('d-none', images.length > 0);
+    }
+
+    function load() {
+        return call('image', 'listImages', { limit: 60 }).then(function (res) {
+            if (res.result !== 1) { say(res, 'Could not load images.'); return; }
+            render((res.data && res.data.images) || []);
+        });
+    }
+
+    /* ---- actions ------------------------------------------------------------------------- */
+
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var btn = document.getElementById('ti-go');
+        btn.disabled = true;                     // generation is slow AND costs money — no double-fire
+        btn.textContent = '…';
+
+        call('image', 'generate', {
+            prompt:   document.getElementById('ti-prompt').value,
+            negative: document.getElementById('ti-negative').value,
+            size:     document.getElementById('ti-size').value,
+            n:        document.getElementById('ti-n').value
+        }).then(function (res) {
+            say(res, 'Generation failed.');
+            return res.result === 1 ? load() : null;
+        }).finally(function () {
+            btn.disabled = false;
+            btn.textContent = form.dataset.label || 'Generate';
+        });
+    });
+    document.getElementById('ti-go').dataset.label = document.getElementById('ti-go').textContent.trim();
+    form.dataset.label = document.getElementById('ti-go').textContent.trim();
+
+    grid.addEventListener('click', function (e) {
+        var btn = e.target.closest('button[data-act]');
+        if (!btn) { return; }
+        var id = btn.closest('[data-image-id]').getAttribute('data-image-id');
+
+        switch (btn.getAttribute('data-act')) {
+            case 'promote': return promote(id, btn);
+            case 'discard': return confirmDiscard(id);
+            case 'refine':  return detail(id, true);
+            case 'detail':  return detail(id, false);
+        }
+    });
+
+    function promote(id, btn) {
+        btn.disabled = true;
+        // Alt text matters and the person who just looked at the image is the one who can write it,
+        // so ask rather than silently reusing the prompt.
+        var alt = (document.getElementById('ti-detail-alt') || {}).value || '';
+        call('image', 'promote', { image_id: id, alt: alt }).then(function (res) {
+            say(res, 'Could not add it to the Media Library.');
+            if (res.result === 1) { load(); }
+        }).finally(function () { btn.disabled = false; });
+    }
+
+    function confirmDiscard(id) {
+        var modalEl = document.getElementById('ti-confirm');
+        document.getElementById('ti-confirm-title').textContent = 'Bin this image?';
+        document.getElementById('ti-confirm-body').textContent =
+            'It is removed from storage. Any refinements made from it are kept and re-attached to its parent.';
+        var ok = document.getElementById('ti-confirm-ok');
+        ok.textContent = 'Bin it';
+
+        var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        function go() {
+            ok.removeEventListener('click', go);
+            modal.hide();
+            call('image', 'discard', { image_id: id }).then(function (res) {
+                say(res, 'Could not bin it.');
+                if (res.result === 1) { load(); }
+            });
+        }
+        ok.addEventListener('click', go);
+        modal.show();
+    }
+
+    /** The drawer: parameters visible and editable, and refine-from-here. */
+    function detail(id, focusRefine) {
+        call('image', 'get', { image_id: id }).then(function (res) {
+            if (res.result !== 1) { say(res, 'Could not load that image.'); return; }
+            var img = res.data.image, chain = res.data.chain || [];
+
+            document.getElementById('ti-detail-title').textContent = 'Image details';
+            document.getElementById('ti-detail-body').innerHTML = '' +
+              '<img class="img-fluid rounded mb-3" alt="' + escapeHtml(img.prompt) + '"' +
+                   ' src="/tigerimage/studio/raw/id/' + encodeURIComponent(img.image_id) + '">' +
+              '<label class="form-label" for="ti-detail-prompt">Prompt</label>' +
+              '<textarea class="form-control mb-2" id="ti-detail-prompt" rows="3">' + escapeHtml(img.prompt) + '</textarea>' +
+              '<label class="form-label" for="ti-detail-alt">Alt text</label>' +
+              '<input class="form-control mb-3" id="ti-detail-alt" value="' + escapeHtml(img.prompt) + '">' +
+              '<button class="btn btn-primary mb-3" id="ti-detail-refine">Refine from this</button>' +
+              '<h3 class="h6">How it was made</h3>' +
+              '<dl class="row small">' +
+                row('Provider', img.provider) + row('Model', img.model) +
+                row('Size', img.width + '×' + img.height) +
+                Object.keys(img.params || {}).map(function (k) { return row(k, img.params[k]); }).join('') +
+              '</dl>' +
+              (chain.length > 1
+                ? '<h3 class="h6">Lineage</h3><p class="small text-body-secondary">' +
+                  chain.length + ' steps — this image is #' +
+                  (chain.map(function (c) { return c.image_id; }).indexOf(img.image_id) + 1) + ' in the chain.</p>'
+                : '');
+
+            document.getElementById('ti-detail-refine').addEventListener('click', function () {
+                var b = this; b.disabled = true;
+                call('image', 'refine', {
+                    image_id: img.image_id,
+                    prompt:   document.getElementById('ti-detail-prompt').value
+                }).then(function (r) {
+                    say(r, 'Refine failed.');
+                    if (r.result === 1) { load(); }
+                }).finally(function () { b.disabled = false; });
+            });
+
+            var oc = bootstrap.Offcanvas.getOrCreateInstance(document.getElementById('ti-detail'));
+            oc.show();
+            if (focusRefine) { document.getElementById('ti-detail-prompt').focus(); }
+        });
+    }
+
+    function row(k, v) {
+        return '<dt class="col-5 text-body-secondary">' + escapeHtml(k) + '</dt>' +
+               '<dd class="col-7">' + escapeHtml(v) + '</dd>';
+    }
+
+    load();
+})();

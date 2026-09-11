@@ -1,0 +1,112 @@
+<?php
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2026 WebTigers. Tiger™ and WebTigers™ are trademarks of WebTigers.
+/**
+ * The image studio (TIGER-98). A prompt bar, a grid of results, and a detail drawer where the prompt
+ * and parameters of any image are editable so "the same but warmer" is a tweak rather than a retype.
+ *
+ * Every mutation goes through /api — the same surface an agent uses, so the screen cannot drift from
+ * it. No inline script or style: behaviour is in assets/js/tigerimage.studio.js.
+ */
+$cap = (array) $this->capability;
+?>
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+        <h1 class="h3 mb-1"><?= $this->escape($this->t('tigerimage.studio.title')) ?></h1>
+        <p class="text-body-secondary mb-0"><?= $this->t('tigerimage.studio.subtitle') ?></p>
+    </div>
+</div>
+
+<div id="ti-feedback"></div>
+
+<?php if (empty($cap['available'])): ?>
+    <?php // Unavailable is not an error state to hide — it is the screen's whole message, with the fix. ?>
+    <div class="alert alert-warning" role="alert">
+        <h2 class="h6 mb-1"><?= $this->escape($this->t('tigerimage.studio.unavailable')) ?></h2>
+        <p class="mb-0"><?= $this->escape((string) ($cap['detail'] ?? '')) ?></p>
+    </div>
+<?php else: ?>
+
+<form id="ti-generate" class="card mb-4" autocomplete="off">
+    <div class="card-body">
+        <label class="form-label" for="ti-prompt"><?= $this->escape($this->t('tigerimage.field.prompt')) ?></label>
+        <textarea class="form-control" id="ti-prompt" name="prompt" rows="2"
+                  placeholder="<?= $this->escape($this->t('tigerimage.field.prompt_hint')) ?>" required></textarea>
+
+        <div class="row g-2 mt-2">
+            <div class="col-sm-4">
+                <label class="form-label" for="ti-negative"><?= $this->escape($this->t('tigerimage.field.negative')) ?></label>
+                <input class="form-control" id="ti-negative" name="negative" type="text">
+            </div>
+            <div class="col-sm-3">
+                <label class="form-label" for="ti-size"><?= $this->escape($this->t('tigerimage.field.size')) ?></label>
+                <select class="form-select" id="ti-size" name="size">
+                    <option value="1024x1024"><?= $this->escape($this->t('tigerimage.size.square')) ?></option>
+                    <option value="1536x1024"><?= $this->escape($this->t('tigerimage.size.landscape')) ?></option>
+                    <option value="1024x1536"><?= $this->escape($this->t('tigerimage.size.portrait')) ?></option>
+                </select>
+            </div>
+            <div class="col-sm-2">
+                <label class="form-label" for="ti-n"><?= $this->escape($this->t('tigerimage.field.count')) ?></label>
+                <select class="form-select" id="ti-n" name="n">
+                    <option>1</option><option>2</option><option selected>4</option>
+                </select>
+            </div>
+            <div class="col-sm-3 d-flex align-items-end">
+                <button class="btn btn-primary w-100" type="submit" id="ti-go">
+                    <?= $this->escape($this->t('tigerimage.action.generate')) ?>
+                </button>
+            </div>
+        </div>
+
+        <p class="text-body-secondary mt-2 mb-0">
+            <?= $this->escape($this->t('tigerimage.studio.provider_note')) ?>
+            <code><?= $this->escape((string) ($cap['provider'] ?? '')) ?></code> ·
+            <code><?= $this->escape((string) ($cap['model'] ?? '')) ?></code>
+        </p>
+    </div>
+</form>
+
+<?php // The grid. Populated from /api; each tile carries its own id so refine/promote/discard work per-image. ?>
+<div id="ti-grid" class="row row-cols-2 row-cols-md-3 row-cols-xl-4 g-3" aria-live="polite"></div>
+
+<div id="ti-empty" class="text-center text-body-secondary py-5 d-none">
+    <?= $this->escape($this->t('tigerimage.studio.empty')) ?>
+</div>
+
+<?php // In-app modal, never window.confirm — house rule. ?>
+<div class="modal fade" id="ti-confirm" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title h5" id="ti-confirm-title"></h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"
+                        aria-label="<?= $this->escape($this->t('core.action.close')) ?>"></button>
+            </div>
+            <div class="modal-body"><p id="ti-confirm-body" class="mb-0"></p></div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <?= $this->escape($this->t('core.action.cancel')) ?>
+                </button>
+                <button type="button" class="btn btn-danger" id="ti-confirm-ok"></button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<?php
+// The detail drawer: prompt + parameters, editable, with refine-from-here. Markup lives in the JS
+// template so one tile and the drawer cannot describe an image differently.
+?>
+<div class="offcanvas offcanvas-end" tabindex="-1" id="ti-detail" style="--bs-offcanvas-width:34rem;">
+    <div class="offcanvas-header">
+        <h2 class="offcanvas-title h5" id="ti-detail-title"></h2>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas"
+                aria-label="<?= $this->escape($this->t('core.action.close')) ?>"></button>
+    </div>
+    <div class="offcanvas-body" id="ti-detail-body"></div>
+</div>
+
+<?php endif; ?>
+
+<?= $this->asset('/_modules/tigerimage/js/tigerimage.studio.js') ?>

@@ -40,6 +40,26 @@ class Tigerimage_Service_Image extends Tiger_Service_Service
         $this->_success($cap);
     }
 
+
+    /**
+     * Map a capability reason to a DEFINED translation key.
+     *
+     * Explicit, not concatenated. An unknown reason falls back to a key that exists, so the worst
+     * outcome is a vaguer message rather than a raw `tigerimage.error.whatever` shown to a user.
+     * Anything added here must be added to languages/en.ini — the conventions test enforces it.
+     *
+     * @param  string $reason from Tigerimage_Model_Provider::capability()
+     * @return string
+     */
+    public static function reasonKey($reason)
+    {
+        switch ((string) $reason) {
+            case 'no_image_provider': return 'tigerimage.error.no_image_provider';
+            case 'no_api_key':        return 'tigerimage.error.no_api_key';
+            default:                  return 'tigerimage.error.unavailable';
+        }
+    }
+
     /**
      * Generate images from a prompt.
      *
@@ -56,7 +76,9 @@ class Tigerimage_Service_Image extends Tiger_Service_Service
         $cap = Tigerimage_Model_Provider::capability();
         if (empty($cap['available'])) {
             // Hand back the REASON, not a generic failure — the agent's next sentence depends on it.
-            $this->_error('tigerimage.error.' . $cap['reason'], ['detail' => $cap['detail'] ?? '']);
+            // Mapped explicitly rather than concatenated: a built key means a NEW reason (a spend cap,
+            // say) emits a translation key nobody defined, and the user sees the raw string.
+            $this->_error(self::reasonKey($cap['reason'] ?? ''), ['detail' => $cap['detail'] ?? '']);
             return;
         }
 
