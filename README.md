@@ -27,7 +27,8 @@ Free, BSD-3, first-party.
 
 ## Installing
 
-Needs **tiger-core 1.5.18+** (the release where image adapters became a registry).
+Needs **tiger-core 1.5.20+**. 1.5.19 made image adapters a lazy registry; 1.5.20 made module
+purge remove `storage/tigerimage/`, so deleting the module actually deletes the images.
 
 App modules are **opt-in**: dropping the files in and running the migration is not enough — the module
 stays inert until it has an `active=1` row, because `Resource_Modules` strips inactive modules from the
@@ -55,9 +56,10 @@ the docroot and outside the swap path — the same place `storage/media` and `st
 | `tigerimage.spend.monthly_cap` | *(unset — uncapped)* USD per org per calendar month |
 | `tigerimage.spend.enforce` | `hard` (refuse) · `soft` (allow and report) |
 
-> **Removing the module does not yet remove this directory.** Module purge currently reaches only the
-> module's own folder, tables and config rows — see TIGER-101, which makes "remove everything, cannot
-> be undone" true for module-owned storage.
+> **Deleting the module deletes these images.** Purge removes `storage/tigerimage/` along with the
+> module's tables, config rows and files, so the confirmation's "cannot be undone" is literal — every
+> generated image goes with it. Images you **promoted** into the Media Library are Media's, not ours,
+> and are unaffected. Needs tiger-core **1.5.20+**; on an older core the directory is left behind.
 
 ## Spend
 
