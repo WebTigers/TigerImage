@@ -1,0 +1,109 @@
+name: tests
+
+# TigerImage's PHP suite is unit-only (no DB): the models are exercised through stubbed ledger reads
+# and the services through their seams, so there is nothing to provision. Dependencies (Tiger_*,
+# Zend_* via tigerzf, PHPUnit) come from a sibling tiger-core checkout, which the test bootstrap
+# resolves — that is the one non-obvious part of running this suite anywhere.
+#
+# The JS suite is plain node + assert and needs no install. It covers the budget gauge's colour rule,
+# which is pure maths and is the only real logic on the client.
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+
+jobs:
+  phpunit:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor and the ceiling of what Tiger supports. A module that only ever runs on one
+        # version is a module that breaks on somebody else's host.
+        php: [ '8.1', '8.3', '8.4', '8.5' ]
+
+    steps:
+      - name: Checkout TigerImage
+        uses: actions/checkout@v4
+        with:
+          path: TigerImage
+
+      # tiger-core is public (BSD-3); no token needed.
+      - name: Checkout tiger-core (test dependencies)
+        uses: actions/checkout@v4
+        with:
+          repository: WebTigers/TigerCore
+          path: tiger-core
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: mbstring
+          coverage: none
+
+      - name: Install tiger-core dev dependencies
+        working-directory: tiger-core
+        run: composer install --no-interaction --no-progress
+
+      - name: Run PHPUnit
+        working-directory: TigerImage
+        run: ../tiger-core/vendor/bin/phpunit -c phpunit.xml
+
+  javascript:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # No package.json, no install: node's own assert is enough for a pure function, and a test
+      # that needs no toolchain is one that still runs in two years.
+      - name: Syntax-check the browser assets
+        run: |
+          for f in assets/js/*.js; do
+            echo "  $f"
+            node --check "$f"
+          done
+
+      - name: Run the gauge tests
+        run: node tests/js/gauge.test.js
+
+  manifest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: module.json is valid and describes what is here
+        run: |
+          python3 - <<'PY'
+          import json, os, sys
+
+          fail = []
+          with open('module.json') as fh:
+              m = json.load(fh)              # invalid JSON fails here, which is the point
+
+          for key in ('schema', 'slug', 'name', 'version', 'license', 'requires', 'paths'):
+              if not m.get(key):
+                  fail.append('module.json is missing "%s"' % key)
+
+          # Every declared path must exist, or the module ships a map to nowhere.
+          for name, rel in (m.get('paths') or {}).items():
+              if not os.path.isdir(rel):
+                  fail.append('paths.%s points at "%s", which is not in the repo' % (name, rel))
+
+          # Translations must be where Tiger LOOKS for them: languages/<lang>/<name>.php. A flat
+          # languages/*.ini matches nothing, errors nowhere, and silently translates not one string.
+          langs = [d for d in os.listdir('languages') if os.path.isdir(os.path.join('languages', d))]
+          if not langs:
+              fail.append('languages/ has no <lang>/ directory — Tiger would load no strings')
+          for stray in [f for f in os.listdir('languages') if f.endswith('.ini')]:
+              fail.append('languages/%s is never read by Tiger; move it to languages/<lang>/<name>.php' % stray)
+
+          for f in fail:
+              print('::error file=module.json::%s' % f)
+          sys.exit(1 if fail else 0)
+          PY

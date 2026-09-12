@@ -21,6 +21,13 @@ class Tigerimage_StudioController extends Tiger_Controller_Action
     {
         $cap = Tigerimage_Model_Provider::capability();
         $this->view->capability = $cap;
+
+        // The budget gauge (TIGER-105), rendered server-side so it is right on first paint rather
+        // than appearing a moment later. A page view is always a session login — it has no
+        // credential — so the org ceiling is the only one that can bind here.
+        $identity = Zend_Auth::getInstance()->getIdentity();
+        $this->view->spend = Tigerimage_Model_Spend::summary((string) ($identity->org_id ?? ''));
+
         $this->view->headTitle($this->view->t('tigerimage.studio.title'));
     }
 

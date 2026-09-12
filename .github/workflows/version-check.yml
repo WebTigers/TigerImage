@@ -1,0 +1,52 @@
+name: Version check
+
+# Guard the source of truth at tag time.
+#
+# 1. module.json "version" must equal the release tag. Tiger_Update_Checker compares the version
+#    RECORDED AT INSTALL (which comes from this manifest) against the newest tag on GitHub. If the
+#    two disagree the update can never satisfy itself: it applies, records the manifest's older
+#    version, and goes on advertising the same update forever. TigerShield, TigerDocs and TigerSSL
+#    all shipped that way once.
+#
+# 2. requires.tiger must name a core version that is actually RELEASED. TigerImage 0.4.0-beta needed
+#    credential attribution that was merged to tiger-core main but had never been tagged — so the
+#    core release had to be cut first. Nothing would have told us; this does.
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  version-matches-tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assert module.json version == tag
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          VER="$(python3 -c "import json;print(json.load(open('module.json'))['version'])")"
+          echo "tag=$TAG   module.json=$VER"
+          if [ "$TAG" != "$VER" ]; then
+            echo "::error file=module.json::module.json version ($VER) does not match the release tag ($TAG). Bump it before tagging, or the update check will offer an update that can never complete."
+            exit 1
+          fi
+          echo "✓ module.json matches the tag."
+
+      - name: Assert the required tiger-core version is released
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          REQ="$(python3 -c "import json;print(json.load(open('module.json'))['requires']['tiger'])")"
+          # e.g. ">=1.5.21" -> "1.5.21". Only a simple floor is checked; a range is left alone.
+          FLOOR="$(printf '%s' "$REQ" | sed -n 's/^>=[[:space:]]*\([0-9][0-9.]*\)$/\1/p')"
+          if [ -z "$FLOOR" ]; then
+            echo "requires.tiger is '$REQ' — not a simple >= floor, skipping."
+            exit 0
+          fi
+          echo "requires.tiger floor = $FLOOR"
+          if gh release view "v$FLOOR" --repo WebTigers/TigerCore >/dev/null 2>&1; then
+            echo "✓ tiger-core v$FLOOR is released."
+          else
+            echo "::error file=module.json::requires.tiger names $FLOOR, which is not a released tiger-core version. Cut that core release first, or nobody can install this module."
+            exit 1
+          fi

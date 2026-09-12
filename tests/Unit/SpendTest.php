@@ -244,6 +244,94 @@ final class SpendTest extends TestCase
         $this->config(['monthly_cap' => '']);   $this->assertNull(Tigerimage_Model_Spend::cap());
     }
 
+    /* ---- the binding ceiling, which the gauge draws (TIGER-105) ----------------------------- */
+
+    /**
+     * The gauge draws the ceiling that will actually stop you, not the headline org figure.
+     *
+     * A bar showing 90%% left while the very next call is refused is worse than no bar at all — it
+     * tells the user the opposite of the truth.
+     */
+    #[Test]
+    public function the_binding_ceiling_is_the_one_with_least_headroom(): void
+    {
+        $this->spendConfig(['monthly_cap' => '100', 'token_cap' => '2']);
+        FakeSpend::$spent      = 10.0;   // org: 90 of 100 left
+        FakeSpend::$tokenSpent = 1.5;    // key: 0.5 of 2 left  <- this is what stops you
+
+        $b = FakeSpend::summary('org', 'cred-1')['binding'];
+        $this->assertSame('token', $b['limit']);
+        $this->assertSame(0.5, $b['remaining']);
+        $this->assertSame(0.25, $b['fraction'], 'a quarter of the KEY is left, not 90%% of the org');
+    }
+
+    /** With no token cap, the org ceiling is the binding one. */
+    #[Test]
+    public function the_org_ceiling_binds_when_it_is_the_tighter_one(): void
+    {
+        $this->spendConfig(['monthly_cap' => '10', 'token_cap' => '100']);
+        FakeSpend::$spent      = 6.0;    // org: 4 of 10 left
+        FakeSpend::$tokenSpent = 1.0;    // key: 99 of 100 left
+
+        $b = FakeSpend::summary('org', 'cred-1')['binding'];
+        $this->assertSame('org', $b['limit']);
+        $this->assertSame(0.4, $b['fraction']);
+    }
+
+    /** Uncapped draws no gauge — inventing a ceiling would be the bar lying. */
+    #[Test]
+    public function an_uncapped_install_has_no_binding_ceiling(): void
+    {
+        $this->config([]);
+        $this->assertNull(FakeSpend::summary('org')['binding'],
+            'with no cap there is no fraction to draw, and a full bar would invent one');
+    }
+
+    /** A soft cap can be overrun; the bar is empty, never negative. */
+    #[Test]
+    public function an_overrun_soft_cap_reads_as_empty_not_negative(): void
+    {
+        $this->spendConfig(['monthly_cap' => '10', 'enforce' => 'soft']);
+        FakeSpend::$spent = 25.0;
+
+        $b = FakeSpend::summary('org')['binding'];
+        $this->assertSame(0.0, $b['fraction'], 'a bar cannot be less than empty');
+        $this->assertSame(0.0, $b['remaining']);
+    }
+
+    /**
+     * Selection runs on RAW headroom, so two overrun ceilings do not tie at zero.
+     *
+     * If the pick were made on the floored figure, both would read 0 and whichever came first in the
+     * array would be reported — naming the wrong limit to someone trying to fix it.
+     */
+    #[Test]
+    public function the_worse_of_two_overrun_ceilings_is_the_one_named(): void
+    {
+        $this->spendConfig(['monthly_cap' => '10', 'token_cap' => '5', 'enforce' => 'soft']);
+        FakeSpend::$spent      = 11.0;   // org over by 1
+        FakeSpend::$tokenSpent = 25.0;   // key over by 20 — much worse
+
+        $b = FakeSpend::summary('org', 'cred-1')['binding'];
+        $this->assertSame('token', $b['limit'], 'the key is the deeper hole and the thing to fix');
+    }
+
+    /** The gauge and the refusal must never disagree about which ceiling bound. */
+    #[Test]
+    public function the_gauge_and_the_refusal_name_the_same_ceiling(): void
+    {
+        $this->spendConfig(['monthly_cap' => '100', 'token_cap' => '2', 'enforce' => 'hard']);
+        FakeSpend::$spent      = 10.0;
+        FakeSpend::$tokenSpent = 1.99;
+
+        $refusal = FakeSpend::check('org', 0.04, 'cred-1');
+        $gauge   = FakeSpend::summary('org', 'cred-1')['binding'];
+
+        $this->assertFalse($refusal['allowed']);
+        $this->assertSame($refusal['limit'], $gauge['limit'], 'one authority, or the bar lies');
+        $this->assertSame($refusal['remaining'], $gauge['remaining']);
+    }
+
     #[Test]
     public function the_summary_never_claims_to_be_a_bill(): void
     {

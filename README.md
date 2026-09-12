@@ -91,6 +91,18 @@ the runaway risk. This rides on core's credential attribution (`credential_id` o
 be both a scalar and a section, so nesting them would make the blanket default unreadable the moment
 anyone set an override.
 
+### The budget gauge
+
+The studio shows a small bar of the budget still available. It draws the **binding** ceiling — the one
+that will actually stop the next call — from the same code path a refusal uses, so a bar that still
+looks healthy can never sit above a call that is about to be refused. It repaints after every
+generation, and after a refusal.
+
+Two stops, not four bands: **green at and above 40% remaining**, the hue then running green → red and
+reaching **red at 10%** and below. A bar that jumps yellow → orange reads as a state change; what is
+actually happening is a budget draining smoothly. An **uncapped** install shows no gauge at all —
+there is no ceiling to draw a fraction of, and a full bar would be inventing one.
+
 ## Tests
 
 ```
