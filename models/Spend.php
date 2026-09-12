@@ -23,6 +23,16 @@ class Tigerimage_Model_Spend
     const CFG_CAP     = 'tigerimage.spend.monthly_cap';
     /** `hard` refuses; `soft` allows and reports. Hard by default. */
     const CFG_ENFORCE = 'tigerimage.spend.enforce';
+    /** USD per calendar month for ANY token-authenticated caller. Empty/absent = only the org cap applies. */
+    const CFG_TOKEN_CAP = 'tigerimage.spend.token_cap';
+    /**
+     * Per-credential override, e.g. `tigerimage.spend.token_cap_for.<credential_id>`.
+     *
+     * A SEPARATE key rather than children of token_cap, because a config node cannot be both a scalar
+     * and a section — not in an INI file and not in Zend_Config. Nesting them would have made the
+     * blanket default unreadable the moment anyone set an override.
+     */
+    const CFG_TOKEN_CAP_FOR = 'tigerimage.spend.token_cap_for';
 
     /**
      * May this org spend this much right now?
@@ -31,35 +41,84 @@ class Tigerimage_Model_Spend
      * @param  float  $estimate USD the pending call is expected to cost
      * @return array {allowed:bool, reason:string, spent:float, cap:float|null, remaining:float|null, enforce:string}
      */
-    public static function check($orgId, $estimate)
+    public static function check($orgId, $estimate, $credentialId = null)
     {
-        $cap     = self::cap();
-        $spent   = static::spentThisMonth($orgId);
         $enforce = self::enforcement();
 
-        if ($cap === null) {
-            return ['allowed' => true, 'reason' => 'uncapped', 'spent' => $spent,
-                    'cap' => null, 'remaining' => null, 'enforce' => $enforce];
+        // TWO CEILINGS, and the tighter one wins (TIGER-100 / TIGER-102).
+        //
+        // The org cap protects the organisation's wallet. The TOKEN cap protects it from one key: a
+        // scoped credential handed to an agent should not be able to spend the whole budget just
+        // because the agent is entitled to spend some of it. A session user has no credential and is
+        // bound by the org cap alone — a human clicking Generate is not the runaway risk.
+        $limits = [];
+        if (($orgCap = self::cap()) !== null) {
+            $limits['org'] = ['cap' => $orgCap, 'spent' => static::spentThisMonth($orgId)];
+        }
+        if ($credentialId !== null && ($tokCap = self::tokenCap($credentialId)) !== null) {
+            $limits['token'] = ['cap' => $tokCap, 'spent' => static::spentThisMonthByCredential($credentialId)];
         }
 
-        $remaining = round($cap - $spent, 5);
-        $wouldBe   = round($spent + (float) $estimate, 5);
+        $orgSpent = $limits['org']['spent'] ?? static::spentThisMonth($orgId);
 
-        if ($wouldBe > $cap) {
-            return [
-                // A soft cap still reports the breach — it just does not stop the call. The operator
-                // asked to be told rather than blocked, and must still be told.
-                'allowed'   => ($enforce !== 'hard'),
-                'reason'    => 'spend_cap_reached',
-                'spent'     => $spent,
-                'cap'       => $cap,
-                'remaining' => max(0.0, $remaining),
-                'enforce'   => $enforce,
-            ];
+        if (!$limits) {
+            return ['allowed' => true, 'reason' => 'uncapped', 'spent' => $orgSpent,
+                    'cap' => null, 'remaining' => null, 'enforce' => $enforce, 'limit' => null];
         }
 
-        return ['allowed' => true, 'reason' => 'within_cap', 'spent' => $spent,
-                'cap' => $cap, 'remaining' => $remaining, 'enforce' => $enforce];
+        // Report against the BINDING limit — the one with least headroom — so a caller told how much
+        // it has left is told the number that will actually stop it.
+        $binding = null;
+        foreach ($limits as $which => $l) {
+            $headroom = round($l['cap'] - $l['spent'], 5);
+            if ($binding === null || $headroom < $binding['remaining']) {
+                $binding = ['which' => $which, 'cap' => $l['cap'], 'spent' => $l['spent'], 'remaining' => $headroom];
+            }
+        }
+
+        $exceeded = round($binding['spent'] + (float) $estimate, 5) > $binding['cap'];
+
+        return [
+            // A soft cap still reports the breach — it just does not stop the call. The operator
+            // asked to be told rather than blocked, and must still be told.
+            'allowed'   => $exceeded ? ($enforce !== 'hard') : true,
+            'reason'    => $exceeded ? 'spend_cap_reached' : 'within_cap',
+            'spent'     => $binding['spent'],
+            'cap'       => $binding['cap'],
+            'remaining' => max(0.0, $binding['remaining']),
+            'enforce'   => $enforce,
+            // WHICH ceiling is binding — 'org' or 'token'. Without this, a user shown "budget used up"
+            // cannot tell whether to raise the org cap or widen one key.
+            'limit'     => $binding['which'],
+        ];
+    }
+
+    /** Spend so far this calendar month for one credential, in USD. */
+    public static function spentThisMonthByCredential($credentialId)
+    {
+        $since = gmdate('Y-m-01 00:00:00');
+        return (float) (new Tigerimage_Model_Image())->spentSinceByCredential((string) $credentialId, $since);
+    }
+
+    /**
+     * The cap for a specific token, or null when tokens are not separately capped.
+     *
+     * A per-credential key wins over the blanket one, so a single agent can be given more or less
+     * room than the default without changing everyone else's.
+     *
+     * @param  string $credentialId
+     * @return float|null
+     */
+    public static function tokenCap($credentialId)
+    {
+        foreach ([self::CFG_TOKEN_CAP_FOR . '.' . $credentialId, self::CFG_TOKEN_CAP] as $key) {
+            $raw = trim((string) self::_config($key));
+            if ($raw !== '') {
+                $cap = (float) $raw;
+                return $cap > 0 ? $cap : null;
+            }
+        }
+        return null;
     }
 
     /**
@@ -96,11 +155,11 @@ class Tigerimage_Model_Spend
      * @param  string $orgId
      * @return array
      */
-    public static function summary($orgId)
+    public static function summary($orgId, $credentialId = null)
     {
         $cap   = self::cap();
         $spent = static::spentThisMonth($orgId);
-        return [
+        $out   = [
             'spent_this_month' => $spent,
             'cap'              => $cap,
             'remaining'        => $cap === null ? null : max(0.0, round($cap - $spent, 5)),
@@ -108,6 +167,18 @@ class Tigerimage_Model_Spend
             'currency'         => 'USD',
             'basis'            => 'estimated',   // never claim these are billed figures
         ];
+
+        // A token-authenticated caller is told ITS OWN ceiling too, so an agent can see the limit that
+        // actually applies to it rather than the organisation's headline figure.
+        if ($credentialId !== null && ($tc = self::tokenCap($credentialId)) !== null) {
+            $ts = static::spentThisMonthByCredential($credentialId);
+            $out['token'] = [
+                'spent_this_month' => $ts,
+                'cap'              => $tc,
+                'remaining'        => max(0.0, round($tc - $ts, 5)),
+            ];
+        }
+        return $out;
     }
 
     /** Read a dotted config key. */

@@ -39,6 +39,8 @@ class Tigerimage_Model_Image extends Tiger_Model_Table
     {
         return $this->insert([
             'org_id'    => (string) ($d['org_id'] ?? ''),
+            // Which credential paid. NULL means a session user — bound by the org cap alone.
+            'credential_id' => !empty($d['credential_id']) ? (string) $d['credential_id'] : null,
             'parent_id' => !empty($d['parent_id']) ? (string) $d['parent_id'] : null,
             'state'     => self::STATE_TEMP,
             'disk'      => (string) ($d['disk'] ?? 'local'),
@@ -119,6 +121,32 @@ class Tigerimage_Model_Image extends Tiger_Model_Table
                  ->order('created_at ASC')
                  ->limit((int) $limit)
         );
+    }
+
+
+    /**
+     * Total estimated spend for one CREDENTIAL since a cutoff (TIGER-100).
+     *
+     * Sibling to spentSince(). A scoped token handed to an agent must not be able to spend the whole
+     * organisation's budget, and that limit can only be enforced if spend is attributable to the key
+     * that incurred it — which core made possible in 1.5.21 by carrying credential_id on the identity.
+     *
+     * Counts deleted rows, for the same reason spentSince() does: binning an image is not a refund,
+     * or a loop could reset its own budget by discarding as it went.
+     *
+     * @param  string $credentialId
+     * @param  string $since 'Y-m-d H:i:s'
+     * @return float USD
+     */
+    public function spentSinceByCredential($credentialId, $since)
+    {
+        if ((string) $credentialId === '') { return 0.0; }
+        $row = $this->fetchRow(
+            $this->select()->from($this->_name, ['total' => 'COALESCE(SUM(cost), 0)'])
+                 ->where('credential_id = ?', (string) $credentialId)
+                 ->where('created_at >= ?', (string) $since)
+        );
+        return $row ? (float) $row->total : 0.0;
     }
 
     /** Recent images for an org, newest first — the studio grid. @return Zend_Db_Table_Rowset_Abstract */

@@ -35,16 +35,22 @@ class Tigerimage_Service_Image extends Tiger_Service_Service
      */
     public function capability(array $params): void
     {
-        $cap = Tigerimage_Model_Provider::capability();
+        $cap = $this->_capability();
         $cap['max_per_call'] = self::MAX_N;
-        $cap['spend']        = Tigerimage_Model_Spend::summary($this->_orgId());
+        $cap['spend']        = $this->_spendSummary($this->_orgId(), $this->_credentialId());
 
         // An agent must be able to learn it is out of budget WITHOUT spending anything to find out.
-        if (!empty($cap['available']) && $cap['spend']['remaining'] !== null && $cap['spend']['remaining'] <= 0
-            && $cap['spend']['enforce'] === 'hard') {
+        // Either ceiling can be the exhausted one, and the answer says WHICH — an agent told only
+        // "no budget" cannot tell whether it has been throttled or the organisation has stopped.
+        $orgDone   = $cap['spend']['remaining'] !== null && $cap['spend']['remaining'] <= 0;
+        $tokenDone = isset($cap['spend']['token']) && $cap['spend']['token']['remaining'] <= 0;
+        if (!empty($cap['available']) && ($orgDone || $tokenDone) && $cap['spend']['enforce'] === 'hard') {
             $cap['available'] = false;
             $cap['reason']    = 'spend_cap_reached';
-            $cap['detail']    = 'The monthly image budget for this organisation is used up.';
+            $cap['limit']     = $tokenDone ? 'token' : 'org';
+            $cap['detail']    = $tokenDone
+                ? 'The monthly image budget for this access key is used up.'
+                : 'The monthly image budget for this organisation is used up.';
         }
         $this->_success($cap);
     }
@@ -128,13 +134,17 @@ class Tigerimage_Service_Image extends Tiger_Service_Service
         $estimate = Tigerimage_Model_Pricing::estimate(
             $resolved['provider'], $resolved['model'], $options['n'], $options['size']
         );
-        $spend = $this->_spendCheck($orgId, $estimate);
+        $credentialId = $this->_credentialId();
+        $spend = $this->_spendCheck($orgId, $estimate, $credentialId);
         if (!$spend['allowed']) {
             $this->_error('tigerimage.error.spend_cap_reached', [
                 'spent'     => $spend['spent'],
                 'cap'       => $spend['cap'],
                 'estimate'  => $estimate,
                 'remaining' => $spend['remaining'],
+                // 'org' or 'token' — otherwise a user told "budget used up" cannot tell whether to
+                // raise the org cap or widen one key.
+                'limit'     => $spend['limit'] ?? null,
             ]);
             return;
         }
@@ -149,11 +159,13 @@ class Tigerimage_Service_Image extends Tiger_Service_Service
         }
 
         try {
-            $ids = (new Tigerimage_Service_Library())->store($result, [
+            $ids = $this->_library()->store($result, [
                 'org_id'    => $orgId,
                 'prompt'    => $prompt,
                 'negative'  => $options['negative_prompt'] ?: null,
                 'parent_id' => $parent ? (string) $parent->image_id : null,
+                // Attribute the spend to the key that incurred it, so a per-token ceiling is enforceable.
+                'credential_id' => $credentialId,
                 // Charge per image actually returned, not per image requested — a provider that gave
                 // us three when we asked for four should not bill the org for four.
                 'cost'      => Tigerimage_Model_Pricing::estimate(
@@ -171,7 +183,7 @@ class Tigerimage_Service_Image extends Tiger_Service_Service
             'model'    => $resolved['model'],
             // Told after every generation, so a loop can see its own budget shrinking rather than
             // discovering the ceiling by hitting it.
-            'spend'    => Tigerimage_Model_Spend::summary($orgId),
+            'spend'    => $this->_spendSummary($orgId, $credentialId),
         ], 'tigerimage.generated');
     }
 
@@ -286,12 +298,39 @@ class Tigerimage_Service_Image extends Tiger_Service_Service
     }
 
     /** @return array the spend decision — see Tigerimage_Model_Spend::check() */
-    protected function _spendCheck($orgId, $estimate)
+    protected function _spendCheck($orgId, $estimate, $credentialId = null)
     {
-        return Tigerimage_Model_Spend::check($orgId, $estimate);
+        return Tigerimage_Model_Spend::check($orgId, $estimate, $credentialId);
+    }
+
+    /** @return array the spend picture — see Tigerimage_Model_Spend::summary(). A seam, like _spendCheck. */
+    protected function _spendSummary($orgId, $credentialId = null)
+    {
+        return Tigerimage_Model_Spend::summary($orgId, $credentialId);
+    }
+
+    /** @return Tigerimage_Service_Library the store, behind a seam so what gets RECORDED is assertable */
+    protected function _library()
+    {
+        return new Tigerimage_Service_Library();
     }
 
     /* ---- helpers ---------------------------------------------------------------------------- */
+
+
+    /**
+     * Which credential authenticated this call, or null for a session user.
+     *
+     * Core carries this on the identity from 1.5.21 (TIGER-102). Before that it was simply not
+     * knowable, which is why a scoped token could spend an organisation's whole budget. Guarded, so
+     * the module degrades to org-cap-only on an older core rather than fataling.
+     */
+    protected function _credentialId()
+    {
+        $identity = Zend_Auth::getInstance()->getIdentity();
+        $id = $identity->credential_id ?? null;
+        return ($id === null || $id === '') ? null : (string) $id;
+    }
 
     /** The caller's org. */
     protected function _orgId()
