@@ -48,7 +48,9 @@ final class ConventionsTest extends TestCase
     {
         $this->assertNotEmpty($this->views(), 'no views found — the glob is wrong, not the rule');
         foreach ($this->views() as $f) {
-            $src  = file_get_contents($f);
+            // Comments EXPLAIN the rule — one that names the tag it forbids is documentation, not
+            // markup. (This test failed on a comment reading "not an inline <script>".)
+            $src  = $this->stripComments(file_get_contents($f));
             $name = basename($f);
 
             // Every <script> must be a src= reference; one with a body is inline JS.
@@ -180,6 +182,86 @@ final class ConventionsTest extends TestCase
         $this->assertGreaterThan(0, $checked, 'no core keys found — the pattern is wrong, not the rule');
     }
 
+    /* ---- the studio's JavaScript (TIGER-107) ------------------------------------------------ */
+
+    /** The studio JS, as source. */
+    private function studioJs(): string
+    {
+        return (string) file_get_contents($this->root() . '/assets/js/tigerimage.studio.js');
+    }
+
+    /** The keys the VIEW promises to send to the JS, read from its $jsKeys list. */
+    private function jsKeysFromView(): array
+    {
+        $src = file_get_contents($this->root() . '/views/scripts/studio/index.phtml');
+        if (!preg_match('~\$jsKeys\s*=\s*\[(.*?)\];~s', $src, $m)) { return []; }
+        preg_match_all("~'([^']+)'~", $m[1], $k);
+        return $k[1];
+    }
+
+    /**
+     * The JS must ask for nothing the view does not send.
+     *
+     * This is the contract between the two files, and it is the failure mode the mechanism invites:
+     * add a `t('…')` call, forget the key in the view's list, and the button silently renders its own
+     * key name. Nothing else would catch it — the key exists in the language file, so the key sweep
+     * is happy.
+     */
+    #[Test]
+    public function the_view_sends_every_string_the_js_asks_for(): void
+    {
+        $promised = $this->jsKeysFromView();
+        $this->assertNotEmpty($promised, 'the view has no $jsKeys list — the mechanism is gone');
+
+        preg_match_all("~\btf?\(\s*'(tigerimage\.[a-z0-9_.]+)'~", $this->studioJs(), $m);
+        $asked = array_unique($m[1]);
+        $this->assertNotEmpty($asked, 'the JS asks for no strings — the pattern changed');
+
+        foreach ($asked as $key) {
+            $this->assertContains($key, $promised,
+                "the JS renders '$key' but the view's \$jsKeys list does not send it — it would show the raw key");
+        }
+    }
+
+    /**
+     * No user-visible English baked into the JS.
+     *
+     * Two narrow checks rather than one broad one, because "looks like a sentence" is not decidable:
+     * a literal assigned to textContent, and words sitting between tags in a generated template. Both
+     * are how every string in this file was previously hardcoded, and neither has a legitimate use.
+     */
+    #[Test]
+    public function the_js_renders_no_hardcoded_english(): void
+    {
+        $src = $this->studioJs();
+
+        preg_match_all('~textContent\s*=\s*([\'"])(.*?)\1~', $src, $m);
+        foreach ($m[2] as $literal) {
+            // Only WORDS are the concern. Clearing a node, or a language-neutral busy marker like an
+            // ellipsis, has nothing to translate — demanding a key for '…' would be ceremony.
+            if (!preg_match('~\pL~u', $literal)) { continue; }
+            $this->fail("studio.js assigns the literal \"$literal\" to textContent — use t()");
+        }
+
+        // Words adjacent to tag syntax: text a user reads, sitting in generated markup. Three shapes,
+        // because the markup is built by concatenation and the text can sit at a string BOUNDARY —
+        // 'Details</button>' has no opening > in the same literal, and a single >Word< pattern walks
+        // straight past it. Mutation testing found exactly that.
+        $shapes = [
+            '~>\s*([A-Za-z][A-Za-z ]{2,})\s*<~',            // >Details<   (whole text in one literal)
+            '~[\'"]\s*([A-Za-z][A-Za-z ]{2,})\s*</~',        // 'Details</  (literal opens with the text)
+            '~>\s*([A-Za-z][A-Za-z ]{2,})\s*[\'"]~',         // >Details'   (literal ends with the text)
+        ];
+        foreach ($shapes as $shape) {
+            preg_match_all($shape, $src, $m);
+            foreach ($m[1] as $text) {
+                $this->fail("studio.js renders the literal \"" . trim($text) . "\" into markup — use t()");
+            }
+        }
+
+        $this->assertStringContainsString("function t(key)", $src, 'the t() helper is gone');
+    }
+
     /** Every key the code emits must exist, or the UI shows a raw key to a user. */
     #[Test]
     public function every_tigerimage_key_is_defined(): void
@@ -191,7 +273,12 @@ final class ConventionsTest extends TestCase
         $this->assertNotEmpty($ini, 'no English strings loaded');
 
         $used = [];
-        foreach (array_merge(glob($this->root() . '/services/*.php') ?: [], $this->views()) as $f) {
+        $scan = array_merge(
+            glob($this->root() . '/services/*.php') ?: [],
+            glob($this->root() . '/assets/js/*.js') ?: [],   // the JS renders keys too (TIGER-107)
+            $this->views()
+        );
+        foreach ($scan as $f) {
             // Comments explain keys and name examples; they do not emit them.
             preg_match_all('~\btigerimage\.[a-z0-9_.]+~', $this->stripComments(file_get_contents($f)), $m);
             foreach ($m[0] as $k) { $used[$k] = $f; }
