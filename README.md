@@ -27,8 +27,9 @@ Free, BSD-3, first-party.
 
 ## Installing
 
-Needs **tiger-core 1.5.20+**. 1.5.19 made image adapters a lazy registry; 1.5.20 made module
-purge remove `storage/tigerimage/`, so deleting the module actually deletes the images.
+Needs **tiger-core 1.5.21+**. 1.5.19 made image adapters a lazy registry; 1.5.20 made module
+purge remove `storage/tigerimage/`, so deleting the module actually deletes the images; 1.5.21 put
+`credential_id` on the identity, which is what makes a per-token spend cap enforceable.
 
 App modules are **opt-in**: dropping the files in and running the migration is not enough — the module
 stays inert until it has an `active=1` row, because `Resource_Modules` strips inactive modules from the
@@ -55,6 +56,8 @@ the docroot and outside the swap path — the same place `storage/media` and `st
 | `tigerimage.retention_days` | `7` (unpromoted images only) |
 | `tigerimage.spend.monthly_cap` | *(unset — uncapped)* USD per org per calendar month |
 | `tigerimage.spend.enforce` | `hard` (refuse) · `soft` (allow and report) |
+| `tigerimage.spend.token_cap` | *(unset)* USD per calendar month for **any** token-authenticated caller |
+| `tigerimage.spend.token_cap_for.<credential_id>` | *(unset)* overrides the blanket token cap for one key |
 
 > **Deleting the module deletes these images.** Purge removes `storage/tigerimage/` along with the
 > module's tables, config rows and files, so the confirmation's "cannot be undone" is literal — every
@@ -72,9 +75,21 @@ rates move. The figures exist to stop a runaway loop and show an operator where 
 reconcile a bill. An unrecognised model is charged `UNKNOWN_COST`, never zero — otherwise a newly
 released model would be the one thing a cap cannot stop.
 
-> **Per-token ceilings are not possible yet.** A scoped MCP token handed to an agent can spend the whole
-> org budget, because `identityFromToken()` builds the identity from the *user* and never records which
-> credential authenticated. Enforcing a per-token limit needs that in core first.
+### Two ceilings
+
+The org cap protects the organisation's wallet. The **token cap** protects it from a single key: a scoped
+credential handed to an agent should not be able to spend the whole budget just because the agent is
+entitled to spend *some* of it. Both are checked and **the tighter one wins**; the refusal names which
+one bound (`limit` is `org` or `token`), so an operator told "budget used up" knows whether to raise the
+org cap or widen one key.
+
+A **session** user has no credential and is bound by the org cap alone — a human clicking Generate is not
+the runaway risk. This rides on core's credential attribution (`credential_id` on the identity, tiger-core
+**1.5.21+**); on an older core no credential is recorded and only the org cap applies.
+
+`token_cap_for.<id>` is a separate key rather than a child of `token_cap` on purpose: a config node cannot
+be both a scalar and a section, so nesting them would make the blanket default unreadable the moment
+anyone set an override.
 
 ## Tests
 
