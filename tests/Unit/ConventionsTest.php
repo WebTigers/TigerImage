@@ -262,6 +262,61 @@ final class ConventionsTest extends TestCase
         $this->assertStringContainsString("function t(key)", $src, 'the t() helper is gone');
     }
 
+    /**
+     * Every supported locale carries every key, with its placeholders intact.
+     *
+     * A module owns its `tigerimage.*` keys and ships its OWN translations for every locale — core
+     * never translates a module. Without this check a locale falls behind silently: the string simply
+     * renders in English for that user and nobody notices until they complain.
+     *
+     * Placeholders are checked by SET, not by order, because a translator may legitimately reorder
+     * %1$s and %2$s to suit the language — that is why they are numbered. Dropping one, or inventing
+     * one, is the actual bug.
+     */
+    #[Test]
+    public function every_locale_is_complete(): void
+    {
+        $expected = ['de', 'en', 'es', 'fr', 'hi', 'pt'];
+        $present  = array_values(array_filter(scandir($this->root() . '/languages'),
+            fn ($d) => $d[0] !== '.' && is_dir($this->root() . '/languages/' . $d)));
+        sort($present);
+        $this->assertSame($expected, $present, 'the shipped locales changed');
+
+        $en = (array) include $this->root() . '/languages/en/tigerimage.php';
+        $this->assertNotEmpty($en);
+
+        foreach ($expected as $lang) {
+            $strings = (array) include $this->root() . "/languages/$lang/tigerimage.php";
+
+            $this->assertSame([], array_diff(array_keys($en), array_keys($strings)),
+                "$lang is missing keys that en has — it would fall back to English for those");
+            $this->assertSame([], array_diff(array_keys($strings), array_keys($en)),
+                "$lang defines keys en does not — one of the two is wrong");
+
+            foreach ($en as $key => $source) {
+                preg_match_all('~%\d?\$?s~', (string) $source, $want);
+                preg_match_all('~%\d?\$?s~', (string) $strings[$key], $got);
+                sort($want[0]);
+                sort($got[0]);
+                $this->assertSame($want[0], $got[0],
+                    "$lang: '$key' does not carry the same placeholders as en");
+                if ($lang !== 'en') {
+                    $this->assertNotSame('', trim((string) $strings[$key]), "$lang: '$key' is empty");
+                }
+            }
+
+            // A locale that is WHOLESALE English — someone copied en/ and never translated it — is
+            // the failure this can actually detect. Per-string equality cannot be the rule: 'Budget'
+            // is identical in en/de/fr and 'Portrait' in en/fr, and flagging those would make the
+            // check cry wolf until it was ignored. Today the worst locale coincides on 4%.
+            if ($lang !== 'en') {
+                $identical = count(array_filter($en, fn ($v, $k) => $strings[$k] === $v, ARRAY_FILTER_USE_BOTH));
+                $this->assertLessThan(0.5 * count($en), $identical,
+                    "$lang matches en on $identical of " . count($en) . " strings — it looks like an untranslated copy");
+            }
+        }
+    }
+
     /** Every key the code emits must exist, or the UI shows a raw key to a user. */
     #[Test]
     public function every_tigerimage_key_is_defined(): void
