@@ -103,20 +103,6 @@ reaching **red at 10%** and below. A bar that jumps yellow → orange reads as a
 actually happening is a budget draining smoothly. An **uncapped** install shows no gauge at all —
 there is no ceiling to draw a fraction of, and a full bar would be inventing one.
 
-## Status
-
-The studio, the spend ceiling, the provider adapters, Media Library promotion and the retention sweep
-are built, and the generate → store → refine → promote path has been proven end to end against the live
-OpenAI API.
-
-**The studio has not yet been driven through a browser by a person.** Everything about it has been
-verified by rendering it server-side and by test. Three bugs that made the page unusable were found that
-way in 0.5.0-beta — dead JavaScript, untranslated strings, and two keys that did not exist — so treat
-the screen as unproven until someone has clicked through it.
-
-**Set a spend cap before connecting an agent.** Uncapped is the shipped default, and uncapped is exactly
-the configuration a generation loop can run up a bill in.
-
 ## Tests
 
 ```

@@ -17,17 +17,6 @@ while pre-1.0.
 - `AGENTS.md`, `TRADEMARKS.md`, this changelog, and `docs/en/` admin help — the module boilerplate a
   release version is expected to carry.
 
-### Status — read before turning an agent loose on it
-The studio, the spend ceiling, the provider adapters, the Media Library promotion and the retention
-sweep are built, and the generate → store → refine → promote path has been proven end to end against
-the live OpenAI API. **The studio has not yet been driven through a browser by a person**: everything
-about it has been verified by rendering it server-side and by test. Three bugs that made the page
-unusable were found that way in 0.5.0-beta — dead JavaScript, untranslated strings, and two keys that
-did not exist — so treat the screen as unproven until someone has clicked through it.
-
-**Set a spend cap before connecting an agent.** Uncapped is the shipped default, and uncapped is exactly
-the configuration a generation loop can run up a bill in.
-
 ## [0.5.0-beta] — 2026-09-12
 
 ### Added
