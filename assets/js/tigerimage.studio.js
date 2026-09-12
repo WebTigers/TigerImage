@@ -19,6 +19,82 @@
     var empty    = document.getElementById('ti-empty');
     var feedback = document.getElementById('ti-feedback');
 
+    /* ---- the budget gauge (TIGER-105) ------------------------------------------------------
+     *
+     * TWO STOPS. Green at and above 40% remaining; the hue then runs green -> red, reaching red at
+     * 10% and staying there below it. No bands: a bar that jumps from yellow to orange reads as a
+     * state change, when what is actually happening is a budget draining smoothly.
+     *
+     * It draws the BINDING ceiling — the one that will actually stop the next call — which the
+     * server picks, from the same code path a refusal uses. A bar showing plenty left above a call
+     * that is about to be refused would be worse than no bar at all.
+     */
+
+    // The colour rule lives in tigerimage.gauge.js — pure maths, no DOM, so it can be tested.
+    var GAUGE = (typeof TigerImageGauge !== 'undefined') ? TigerImageGauge : null;
+    var gauge = document.getElementById('ti-budget');
+
+    function money(n) {
+        return '$' + Number(n).toFixed(2);
+    }
+
+    /**
+     * Paint the gauge from a binding-ceiling object {fraction, remaining, cap, limit}.
+     *
+     * A null binding means nothing is capped, so there is no gauge to draw — the element is removed
+     * rather than emptied, because an uncapped budget showing a full bar is the bar inventing a
+     * ceiling that does not exist.
+     */
+    function paintGauge(binding) {
+        if (!gauge) { return; }
+        if (!binding) { gauge.remove(); gauge = null; return; }
+
+        if (!GAUGE) { return; }                  // the rule failed to load; leave the bar as rendered
+        var fraction = Number(binding.fraction);
+        var pct      = GAUGE.percent(fraction);
+        var fill     = document.getElementById('ti-budget-fill');
+        var text     = document.getElementById('ti-budget-text');
+
+        gauge.style.setProperty('--ti-gauge-hue', String(Math.round(GAUGE.hue(fraction))));
+        if (fill) { fill.style.width = pct + '%'; }
+
+        var bar = gauge.querySelector('.progress');
+        if (bar) { bar.setAttribute('aria-valuenow', String(pct)); }
+
+        if (text) {
+            text.textContent = money(binding.remaining) + ' / ' + money(binding.cap);
+        }
+    }
+
+    /**
+     * Repaint from any /api response that says something about spend.
+     *
+     * Two shapes, because the moment the gauge matters MOST is the one that is not a success: a
+     * generation returns a full summary, while a refusal returns the binding ceiling directly. Being
+     * refused and watching the bar still show headroom is exactly the confusion this is meant to end.
+     */
+    function paintFromResponse(res) {
+        var d = res && res.data;
+        if (!d) { return; }
+
+        if (d.spend && Object.prototype.hasOwnProperty.call(d.spend, 'binding')) {
+            paintGauge(d.spend.binding);
+        } else if (Object.prototype.hasOwnProperty.call(d, 'fraction') && d.cap) {
+            paintGauge({ fraction: d.fraction, remaining: d.remaining, cap: d.cap, limit: d.limit });
+        }
+    }
+
+    // First paint from what the server already rendered, so the bar is correct immediately rather
+    // than after a round trip.
+    if (gauge) {
+        paintGauge({
+            fraction:  parseFloat(gauge.dataset.fraction),
+            remaining: parseFloat(gauge.dataset.remaining),
+            cap:       parseFloat(gauge.dataset.cap),
+            limit:     gauge.dataset.limit
+        });
+    }
+
     /* ---- /api ---------------------------------------------------------------------------- */
 
     function call(service, method, params) {
@@ -97,6 +173,7 @@
             n:        document.getElementById('ti-n').value
         }).then(function (res) {
             say(res, 'Generation failed.');
+            paintFromResponse(res);      // the whole point: watch the budget drain as you spend it
             return res.result === 1 ? load() : null;
         }).finally(function () {
             btn.disabled = false;
@@ -185,6 +262,7 @@
                     prompt:   document.getElementById('ti-detail-prompt').value
                 }).then(function (r) {
                     say(r, 'Refine failed.');
+                    paintFromResponse(r);
                     if (r.result === 1) { load(); }
                 }).finally(function () { b.disabled = false; });
             });

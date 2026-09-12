@@ -33,17 +33,66 @@ final class ConventionsTest extends TestCase
         return $out;
     }
 
+    /**
+     * No INLINE script or style in a view — but a `<script src>` pointing at an asset is the point.
+     *
+     * This rule used to forbid the `<script` tag outright, and that is how the studio shipped with a
+     * bare `<?= $this->asset('…studio.js') ?>` that printed the URL into the page as text: the helper
+     * returns a URL, not a tag, so the script never loaded and the whole studio was dead in a browser.
+     * A rule strict enough to forbid the correct construct pushes people into an incorrect one.
+     *
+     * Core's own modules (comment, analytics) load module JS exactly this way.
+     */
     #[Test]
     public function views_carry_no_inline_script_or_style(): void
     {
         $this->assertNotEmpty($this->views(), 'no views found — the glob is wrong, not the rule');
         foreach ($this->views() as $f) {
-            $src = file_get_contents($f);
-            $this->assertSame(0, preg_match('~<script[\s>]~i', $src),
-                basename($f) . ': JS belongs in an asset, not the view');
+            $src  = file_get_contents($f);
+            $name = basename($f);
+
+            // Every <script> must be a src= reference; one with a body is inline JS.
+            preg_match_all('~<script\b[^>]*>~i', $src, $tags);
+            foreach ($tags[0] as $tag) {
+                $this->assertMatchesRegularExpression('~\ssrc\s*=~i', $tag,
+                    $name . ': inline JS belongs in an asset — ' . $tag);
+            }
+
             $this->assertSame(0, preg_match('~<style[\s>]~i', $src),
-                basename($f) . ': CSS belongs in the skin, not the view');
+                $name . ': CSS belongs in a stylesheet, not the view');
         }
+    }
+
+    /**
+     * A module asset referenced from a view must actually exist, and be referenced as a TAG.
+     *
+     * Both halves of the studio's dead-JS bug are pinned here: `asset()` echoed on its own emits a
+     * URL as page text, and a path that does not resolve to a shipped file 404s at the browser.
+     */
+    #[Test]
+    public function referenced_module_assets_exist_and_are_real_tags(): void
+    {
+        $seen = 0;
+        foreach ($this->views() as $f) {
+            $src = file_get_contents($f);
+
+            // An asset() call must sit inside an attribute (src=" or href="), never be echoed bare.
+            preg_match_all('~<\?=\s*(?:\$this->escape\(\s*)?\$this->asset\(~', $src, $calls, PREG_OFFSET_CAPTURE);
+            foreach ($calls[0] as $call) {
+                $before = substr($src, max(0, $call[1] - 80), min(80, $call[1]));
+                $this->assertMatchesRegularExpression('~(?:src|href)\s*=\s*"$~i', $before,
+                    basename($f) . ': asset() returns a URL — it must fill an attribute, not be echoed alone');
+            }
+
+            // And the file it names must be shipped.
+            preg_match_all('~/_modules/tigerimage/([A-Za-z0-9_./-]+)~', $src, $paths);
+            foreach ($paths[1] as $rel) {
+                $seen++;
+                $this->assertFileExists($this->root() . '/assets/' . $rel,
+                    basename($f) . ': references an asset that is not in the module');
+            }
+        }
+        $this->assertGreaterThan(0, $seen, 'no module assets referenced — the pattern is wrong, not the rule');
     }
 
     /** Browser dialogs cannot be styled, translated, or tested. */
@@ -72,12 +121,74 @@ final class ConventionsTest extends TestCase
         }
     }
 
-    /** Every key the code emits must exist in en.ini, or the UI shows a raw key to a user. */
+    /**
+     * Translations must sit where Tiger actually LOADS them: languages/<lang>/<name>.php, returning
+     * a [key => string] array.
+     *
+     * This module shipped a flat `languages/en.ini` instead. Nothing errored — the glob in
+     * Tiger_Application_Bootstrap::_languageFiles simply matched no file, so not one string was ever
+     * translated and the studio rendered its own key names at the user. The old test below checked
+     * that every key EXISTED, which it did; nobody checked the file could be read by the framework.
+     * Content without the contract proves nothing.
+     */
+    #[Test]
+    public function translations_are_where_the_framework_looks_for_them(): void
+    {
+        $files = glob($this->root() . '/languages/*/*.php') ?: [];
+        $this->assertNotEmpty($files,
+            'no languages/<lang>/*.php — Tiger loads module translations from that glob and nothing else');
+
+        $this->assertSame([], glob($this->root() . '/languages/*.ini') ?: [],
+            'a languages/*.ini is never read by Tiger and will silently translate nothing');
+
+        foreach ($files as $f) {
+            $data = include $f;
+            $this->assertIsArray($data, basename($f) . ' must RETURN a [key => string] array');
+            $this->assertNotEmpty($data, basename($f) . ' returned an empty array');
+            foreach ($data as $k => $v) {
+                $this->assertIsString($k, basename($f) . ': keys must be strings');
+                $this->assertIsString($v, basename($f) . ": '$k' must map to a string");
+            }
+        }
+    }
+
+    /**
+     * A `core.*` key a view borrows must actually exist in tiger-core.
+     *
+     * The studio referenced `core.action.close` and `core.action.cancel`; core has neither (it has
+     * `core.common.close`, and every module owns its own cancel). Both would have rendered their own
+     * key name on the modal buttons. A module cannot invent keys in someone else's namespace — if it
+     * is not there, the string belongs to the module.
+     */
+    #[Test]
+    public function borrowed_core_keys_exist_in_core(): void
+    {
+        $file = TIGER_CORE_PATH . '/core/languages/en/core.php';
+        if (!is_file($file)) { $this->markTestSkipped('tiger-core language file not resolvable'); }
+        $core = (array) include $file;
+        $this->assertNotEmpty($core, 'core English strings did not load');
+
+        $checked = 0;
+        foreach ($this->views() as $f) {
+            preg_match_all('~\bcore\.[a-z0-9_.]+~', $this->stripComments(file_get_contents($f)), $m);
+            foreach (array_unique($m[0]) as $key) {
+                $checked++;
+                $this->assertArrayHasKey($key, $core,
+                    basename($f) . ": borrows '$key', which tiger-core does not define");
+            }
+        }
+        $this->assertGreaterThan(0, $checked, 'no core keys found — the pattern is wrong, not the rule');
+    }
+
+    /** Every key the code emits must exist, or the UI shows a raw key to a user. */
     #[Test]
     public function every_tigerimage_key_is_defined(): void
     {
-        $ini = parse_ini_file($this->root() . '/languages/en.ini', false, INI_SCANNER_RAW) ?: [];
-        $this->assertNotEmpty($ini, 'en.ini did not parse');
+        $ini = [];
+        foreach (glob($this->root() . '/languages/en/*.php') ?: [] as $f) {
+            $ini += (array) include $f;
+        }
+        $this->assertNotEmpty($ini, 'no English strings loaded');
 
         $used = [];
         foreach (array_merge(glob($this->root() . '/services/*.php') ?: [], $this->views()) as $f) {
@@ -95,7 +206,7 @@ final class ConventionsTest extends TestCase
         }, ARRAY_FILTER_USE_BOTH);
 
         foreach ($used as $key => $file) {
-            $this->assertArrayHasKey($key, $ini, "$key is emitted by " . basename($file) . " but missing from en.ini");
+            $this->assertArrayHasKey($key, $ini, "$key is emitted by " . basename($file) . " but has no English string");
         }
     }
 

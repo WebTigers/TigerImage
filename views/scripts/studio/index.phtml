@@ -10,11 +10,41 @@
  */
 $cap = (array) $this->capability;
 ?>
-<div class="d-flex align-items-center justify-content-between mb-3">
+<link rel="stylesheet" href="<?= $this->escape($this->asset('/_modules/tigerimage/css/tigerimage.studio.css')) ?>">
+<?php
+// The budget gauge (TIGER-105). Drawn only when something is actually capped — an uncapped budget
+// has no ceiling to show a fraction of, and a full bar would be inventing one.
+$spend   = (array) ($this->spend ?: []);
+$binding = !empty($spend['binding']) ? (array) $spend['binding'] : null;
+?>
+<div class="d-flex align-items-center justify-content-between gap-3 flex-wrap mb-3">
     <div>
         <h1 class="h3 mb-1"><?= $this->escape($this->t('tigerimage.studio.title')) ?></h1>
         <p class="text-body-secondary mb-0"><?= $this->t('tigerimage.studio.subtitle') ?></p>
     </div>
+
+    <?php if ($binding): ?>
+        <?php
+        // Data attributes, not an inline style: the JS owns the colour, the view owns the numbers.
+        $title = $this->t($binding['limit'] === 'token' ? 'tigerimage.budget.token' : 'tigerimage.budget.org')
+               . ' ' . $this->t('tigerimage.budget.estimated');
+        ?>
+        <div id="ti-budget" class="ti-budget"
+             data-fraction="<?= $this->escape((string) $binding['fraction']) ?>"
+             data-remaining="<?= $this->escape((string) $binding['remaining']) ?>"
+             data-cap="<?= $this->escape((string) $binding['cap']) ?>"
+             data-limit="<?= $this->escape((string) $binding['limit']) ?>"
+             title="<?= $this->escape($title) ?>">
+            <span class="text-body-secondary"><?= $this->escape($this->t('tigerimage.budget.label')) ?></span>
+            <div class="progress ti-budget-bar" role="progressbar"
+                 aria-label="<?= $this->escape($this->t('tigerimage.budget.label')) ?>"
+                 aria-valuemin="0" aria-valuemax="100"
+                 aria-valuenow="<?= $this->escape((string) round($binding['fraction'] * 100)) ?>">
+                <div class="progress-bar ti-budget-fill" id="ti-budget-fill"></div>
+            </div>
+            <span class="ti-budget-text text-body-secondary" id="ti-budget-text"></span>
+        </div>
+    <?php endif; ?>
 </div>
 
 <div id="ti-feedback"></div>
@@ -81,12 +111,12 @@ $cap = (array) $this->capability;
             <div class="modal-header">
                 <h2 class="modal-title h5" id="ti-confirm-title"></h2>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"
-                        aria-label="<?= $this->escape($this->t('core.action.close')) ?>"></button>
+                        aria-label="<?= $this->escape($this->t('core.common.close')) ?>"></button>
             </div>
             <div class="modal-body"><p id="ti-confirm-body" class="mb-0"></p></div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                    <?= $this->escape($this->t('core.action.cancel')) ?>
+                    <?= $this->escape($this->t('tigerimage.action.cancel')) ?>
                 </button>
                 <button type="button" class="btn btn-danger" id="ti-confirm-ok"></button>
             </div>
@@ -102,11 +132,12 @@ $cap = (array) $this->capability;
     <div class="offcanvas-header">
         <h2 class="offcanvas-title h5" id="ti-detail-title"></h2>
         <button type="button" class="btn-close" data-bs-dismiss="offcanvas"
-                aria-label="<?= $this->escape($this->t('core.action.close')) ?>"></button>
+                aria-label="<?= $this->escape($this->t('core.common.close')) ?>"></button>
     </div>
     <div class="offcanvas-body" id="ti-detail-body"></div>
 </div>
 
 <?php endif; ?>
 
-<?= $this->asset('/_modules/tigerimage/js/tigerimage.studio.js') ?>
+<script src="<?= $this->escape($this->asset('/_modules/tigerimage/js/tigerimage.gauge.js')) ?>" defer></script>
+<script src="<?= $this->escape($this->asset('/_modules/tigerimage/js/tigerimage.studio.js')) ?>" defer></script>

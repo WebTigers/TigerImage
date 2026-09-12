@@ -145,6 +145,8 @@ class Tigerimage_Service_Image extends Tiger_Service_Service
                 // 'org' or 'token' — otherwise a user told "budget used up" cannot tell whether to
                 // raise the org cap or widen one key.
                 'limit'     => $spend['limit'] ?? null,
+                // Enough for the studio to repaint its gauge from the refusal itself (TIGER-105).
+                'fraction'  => $spend['fraction'] ?? null,
             ]);
             return;
         }

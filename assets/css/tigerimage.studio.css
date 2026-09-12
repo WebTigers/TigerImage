@@ -1,0 +1,50 @@
+/* SPDX-License-Identifier: BSD-3-Clause
+ * Copyright (c) 2026 WebTigers. Tiger™ and WebTigers™ are trademarks of WebTigers.
+ *
+ * Studio styles. No inline style in the view (house rule) — including the gauge, whose colour is a
+ * single custom property the JS sets.
+ */
+
+/* ---- budget gauge (TIGER-105) ---------------------------------------------------------------
+ *
+ * Small on purpose. It sits beside the page title and is meant to be glanced at, not read.
+ *
+ * The hue is ONE custom property, set by the JS. Two stops: green at and above 40% remaining,
+ * interpolating to red at 10% and below. Lightness/saturation are fixed so only the hue moves —
+ * a bar that changed brightness as well would read as a different component.
+ */
+.ti-budget {
+    --ti-gauge-hue: 120;
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    min-width: 12rem;
+}
+
+.ti-budget-bar {
+    flex: 1 1 auto;
+    height: .5rem;
+    min-width: 6rem;
+}
+
+.ti-budget-fill {
+    background-color: hsl(var(--ti-gauge-hue) 72% 42%);
+    transition: width .35s ease, background-color .35s ease;
+}
+
+/* The figure is a footnote to the bar, not content — the one place small type is right. */
+.ti-budget-text {
+    white-space: nowrap;
+}
+
+/* Respect a reduced-motion preference: the colour still changes, it just does not animate. */
+@media (prefers-reduced-motion: reduce) {
+    .ti-budget-fill { transition: none; }
+}
+
+/* ---- grid ----------------------------------------------------------------------------------- */
+
+.ti-thumb {
+    aspect-ratio: 1 / 1;
+    object-fit: cover;
+}

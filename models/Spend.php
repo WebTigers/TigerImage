@@ -51,31 +51,18 @@ class Tigerimage_Model_Spend
         // scoped credential handed to an agent should not be able to spend the whole budget just
         // because the agent is entitled to spend some of it. A session user has no credential and is
         // bound by the org cap alone — a human clicking Generate is not the runaway risk.
-        $limits = [];
-        if (($orgCap = self::cap()) !== null) {
-            $limits['org'] = ['cap' => $orgCap, 'spent' => static::spentThisMonth($orgId)];
-        }
-        if ($credentialId !== null && ($tokCap = self::tokenCap($credentialId)) !== null) {
-            $limits['token'] = ['cap' => $tokCap, 'spent' => static::spentThisMonthByCredential($credentialId)];
-        }
-
+        $limits   = self::_ceilings($orgId, $credentialId);
         $orgSpent = $limits['org']['spent'] ?? static::spentThisMonth($orgId);
 
         if (!$limits) {
             return ['allowed' => true, 'reason' => 'uncapped', 'spent' => $orgSpent,
-                    'cap' => null, 'remaining' => null, 'enforce' => $enforce, 'limit' => null];
+                    'cap' => null, 'remaining' => null, 'fraction' => null,
+                    'enforce' => $enforce, 'limit' => null];
         }
 
         // Report against the BINDING limit — the one with least headroom — so a caller told how much
         // it has left is told the number that will actually stop it.
-        $binding = null;
-        foreach ($limits as $which => $l) {
-            $headroom = round($l['cap'] - $l['spent'], 5);
-            if ($binding === null || $headroom < $binding['remaining']) {
-                $binding = ['which' => $which, 'cap' => $l['cap'], 'spent' => $l['spent'], 'remaining' => $headroom];
-            }
-        }
-
+        $binding  = self::_bindingOf($limits);
         $exceeded = round($binding['spent'] + (float) $estimate, 5) > $binding['cap'];
 
         return [
@@ -85,11 +72,14 @@ class Tigerimage_Model_Spend
             'reason'    => $exceeded ? 'spend_cap_reached' : 'within_cap',
             'spent'     => $binding['spent'],
             'cap'       => $binding['cap'],
-            'remaining' => max(0.0, $binding['remaining']),
+            'remaining' => $binding['remaining'],
+            // The share still available, so a refusal can repaint the gauge (TIGER-105) without a
+            // second round trip — the moment a user most needs to see the bar is when it stopped them.
+            'fraction'  => $binding['fraction'],
             'enforce'   => $enforce,
             // WHICH ceiling is binding — 'org' or 'token'. Without this, a user shown "budget used up"
             // cannot tell whether to raise the org cap or widen one key.
-            'limit'     => $binding['which'],
+            'limit'     => $binding['limit'],
         ];
     }
 
@@ -157,9 +147,10 @@ class Tigerimage_Model_Spend
      */
     public static function summary($orgId, $credentialId = null)
     {
-        $cap   = self::cap();
-        $spent = static::spentThisMonth($orgId);
-        $out   = [
+        $limits = self::_ceilings($orgId, $credentialId);
+        $cap    = self::cap();
+        $spent  = $limits['org']['spent'] ?? static::spentThisMonth($orgId);
+        $out    = [
             'spent_this_month' => $spent,
             'cap'              => $cap,
             'remaining'        => $cap === null ? null : max(0.0, round($cap - $spent, 5)),
@@ -170,15 +161,72 @@ class Tigerimage_Model_Spend
 
         // A token-authenticated caller is told ITS OWN ceiling too, so an agent can see the limit that
         // actually applies to it rather than the organisation's headline figure.
-        if ($credentialId !== null && ($tc = self::tokenCap($credentialId)) !== null) {
-            $ts = static::spentThisMonthByCredential($credentialId);
+        if (isset($limits['token'])) {
+            $t = $limits['token'];
             $out['token'] = [
-                'spent_this_month' => $ts,
-                'cap'              => $tc,
-                'remaining'        => max(0.0, round($tc - $ts, 5)),
+                'spent_this_month' => $t['spent'],
+                'cap'              => $t['cap'],
+                'remaining'        => max(0.0, round($t['cap'] - $t['spent'], 5)),
             ];
         }
+
+        // The ceiling that will actually stop this caller, and the share of it still available.
+        // The budget gauge (TIGER-105) draws THIS — from the same authority check() refuses by, so a
+        // bar that still looks healthy can never sit above a call that is about to be refused.
+        // Null when nothing is capped: an uncapped budget has no ceiling to draw a fraction of, and
+        // inventing one would be the gauge lying.
+        $out['binding'] = self::_bindingOf($limits);
         return $out;
+    }
+
+    /**
+     * The ceilings in force for this caller — 'org' and/or 'token'. Empty means uncapped.
+     *
+     * ONE place that decides which ceilings exist and reads their ledgers, so check() and summary()
+     * cannot answer differently. They used to compute this separately, which is exactly how a gauge
+     * and a refusal drift apart.
+     *
+     * @return array<string,array{cap:float,spent:float}>
+     */
+    protected static function _ceilings($orgId, $credentialId = null)
+    {
+        $limits = [];
+        if (($orgCap = self::cap()) !== null) {
+            $limits['org'] = ['cap' => $orgCap, 'spent' => static::spentThisMonth($orgId)];
+        }
+        if ($credentialId !== null && ($tokCap = self::tokenCap($credentialId)) !== null) {
+            $limits['token'] = ['cap' => $tokCap, 'spent' => static::spentThisMonthByCredential($credentialId)];
+        }
+        return $limits;
+    }
+
+    /**
+     * The BINDING ceiling — least headroom — or null when nothing is capped.
+     *
+     * Selection runs on RAW headroom, which may be negative when a soft cap has been overrun; only
+     * the reported figure is floored at zero. Picking on a floored number would tie every overrun
+     * ceiling at 0 and report whichever happened to be first.
+     *
+     * @return array{limit:string,cap:float,spent:float,remaining:float,fraction:float}|null
+     */
+    protected static function _bindingOf(array $limits)
+    {
+        $binding = null;
+        foreach ($limits as $which => $l) {
+            $headroom = round($l['cap'] - $l['spent'], 5);
+            if ($binding === null || $headroom < $binding['remaining']) {
+                $binding = ['limit' => $which, 'cap' => $l['cap'], 'spent' => $l['spent'], 'remaining' => $headroom];
+            }
+        }
+        if ($binding === null) { return null; }
+
+        // The share still available, 0..1 — what a gauge draws. Clamped, because a soft cap can be
+        // overrun and a bar cannot be less than empty.
+        $binding['fraction']  = $binding['cap'] > 0
+            ? max(0.0, min(1.0, round($binding['remaining'] / $binding['cap'], 5)))
+            : 0.0;
+        $binding['remaining'] = max(0.0, $binding['remaining']);
+        return $binding;
     }
 
     /** Read a dotted config key. */
