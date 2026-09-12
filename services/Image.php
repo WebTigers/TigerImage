@@ -137,7 +137,12 @@ class Tigerimage_Service_Image extends Tiger_Service_Service
         $credentialId = $this->_credentialId();
         $spend = $this->_spendCheck($orgId, $estimate, $credentialId);
         if (!$spend['allowed']) {
-            $this->_error('tigerimage.error.spend_cap_reached', [
+            // Name the ceiling that actually bound. "The organisation's budget is used up" is simply
+            // false when it was the key that ran out, and it sends the reader to fix the wrong thing.
+            $capKey = (($spend['limit'] ?? '') === 'token')
+                ? 'tigerimage.error.spend_cap_reached_token'
+                : 'tigerimage.error.spend_cap_reached';
+            $this->_error($capKey, [
                 'spent'     => $spend['spent'],
                 'cap'       => $spend['cap'],
                 'estimate'  => $estimate,

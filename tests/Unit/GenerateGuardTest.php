@@ -20,6 +20,7 @@ final class GenerateGuardTest extends TestCase
     protected function tearDown(): void
     {
         SpyImageAdapter::$calls = 0;
+        FakeSpend2::$tokenSpent = 0.0;   // static state leaks between tests otherwise
         Tiger_Agent_Provider_Factory::clearImageAdapters();
         if (Zend_Registry::isRegistered('Zend_Config')) { Zend_Registry::set('Zend_Config', null); }
     }
@@ -67,6 +68,37 @@ final class GenerateGuardTest extends TestCase
         $svc->generate(['prompt' => 'a tiger', 'n' => 1]);
 
         $this->assertSame(1, SpyImageAdapter::$calls, 'soft warns rather than blocking');
+    }
+
+    /**
+     * The refusal names the ceiling that bound, because telling someone the ORGANISATION is out of
+     * budget when it was their key sends them to fix the wrong thing.
+     */
+    #[Test]
+    public function the_refusal_names_the_ceiling_that_bound(): void
+    {
+        $svc = $this->boot(['monthly_cap' => '100', 'token_cap' => '1', 'enforce' => 'hard']);
+        $svc->credentialId = 'cred-7';
+        GuardableImageService::$spent = 0.0;      // the org has plenty; the KEY does not
+        FakeSpend2::$tokenSpent = 0.99;
+
+        $svc->generate(['prompt' => 'a tiger', 'n' => 1]);
+
+        $this->assertSame(0, SpyImageAdapter::$calls, 'still refused before the provider is contacted');
+        $this->assertSame('tigerimage.error.spend_cap_reached_token', $svc->lastError,
+            'the message must say the KEY is spent, not the organisation');
+    }
+
+    /** An org-bound refusal keeps the organisation-worded message. */
+    #[Test]
+    public function an_org_refusal_still_names_the_organisation(): void
+    {
+        $svc = $this->boot(['monthly_cap' => '10', 'enforce' => 'hard']);
+        GuardableImageService::$spent = 9.99;
+
+        $svc->generate(['prompt' => 'a tiger', 'n' => 4]);
+
+        $this->assertSame('tigerimage.error.spend_cap_reached', $svc->lastError);
     }
 
     /**
@@ -185,5 +217,7 @@ final class RecordingLibrary extends Tigerimage_Service_Library
 /** Stubs only the ledger read, so the real cap policy runs. */
 final class FakeSpend2 extends Tigerimage_Model_Spend
 {
+    public static float $tokenSpent = 0.0;
     public static function spentThisMonth($orgId) { return GuardableImageService::$spent; }
+    public static function spentThisMonthByCredential($credentialId) { return self::$tokenSpent; }
 }

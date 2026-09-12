@@ -97,6 +97,50 @@ $binding = !empty($spend['binding']) ? (array) $spend['binding'] : null;
     </div>
 </form>
 
+<?php
+// Strings the JavaScript renders (TIGER-107).
+//
+// A JSON map in a DATA ATTRIBUTE, not an inline <script>: the house rule forbids inline script in a
+// view, and this needs no serialiser on the server beyond json_encode and one JSON.parse on the
+// client. FULL keys, not short ones, so the convention sweep that checks every emitted
+// `tigerimage.*` key exists reaches the JavaScript too — a short key would have hidden it.
+//
+// Anything the JS puts in front of a user belongs in this list. It is the contract between the two
+// files, and a test asserts the JS asks for nothing that is not here.
+$jsKeys = [
+    'tigerimage.action.details',
+    'tigerimage.action.refine',
+    'tigerimage.action.refine_from_this',
+    'tigerimage.action.keep',
+    'tigerimage.action.bin',
+    'tigerimage.action.bin_confirm',
+    'tigerimage.action.generate',
+    'tigerimage.action.cancel',
+    'tigerimage.state.in_media',
+    'tigerimage.confirm.bin_title',
+    'tigerimage.confirm.bin_body',
+    'tigerimage.detail.title',
+    'tigerimage.detail.prompt',
+    'tigerimage.detail.alt',
+    'tigerimage.detail.how_made',
+    'tigerimage.detail.provider',
+    'tigerimage.detail.model',
+    'tigerimage.detail.size',
+    'tigerimage.detail.lineage',
+    'tigerimage.detail.lineage_note',
+    'tigerimage.error.list_failed',
+    'tigerimage.error.get_failed',
+    'tigerimage.error.refine_failed',
+    'tigerimage.error.discard_failed',
+    'tigerimage.error.generation_failed',
+    'tigerimage.error.promote_failed',
+];
+$jsStrings = [];
+foreach ($jsKeys as $k) { $jsStrings[$k] = $this->t($k); }
+?>
+<div id="ti-strings" hidden
+     data-strings="<?= $this->escape(json_encode($jsStrings, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?>"></div>
+
 <?php // The grid. Populated from /api; each tile carries its own id so refine/promote/discard work per-image. ?>
 <div id="ti-grid" class="row row-cols-2 row-cols-md-3 row-cols-xl-4 g-3" aria-live="polite"></div>
 
