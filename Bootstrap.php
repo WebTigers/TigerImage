@@ -11,18 +11,19 @@
 class Tigerimage_Bootstrap extends Zend_Application_Module_Bootstrap
 {
     /**
-     * Teach the module autoloader about `providers/`.
+     * Teach the module autoloader about `adapters/`.
      *
-     * ZF1's resource loader knows the standard namespaces — Model, Service, Form, Plugin, DbTable —
-     * and nothing else. `Tigerimage_Provider_*` is ours, so without this it is simply not loadable.
-     * Discovered the hard way: the class-not-found took down the WHOLE application boot, not just
-     * image generation, because a module Bootstrap failing is a fatal during Resource_Modules.
+     * ZF1 ships exactly eight resource types — Model_DbTable, Model_Mapper, Form, Model, Plugin,
+     * Service, View_Helper, View_Filter — so anything else must be declared. That is ordinary practice
+     * here rather than a workaround: analytics, register, TigerLicense and TigerStripe each declare
+     * `Widget`, TigerRegistry declares `Domain`, and TigerMarketplace declares this exact
+     * `Adapter`/`adapters/` type. Matching it keeps one name for one concept across modules.
      */
-    protected function _initProviderAutoload()
+    protected function _initAdapterAutoload()
     {
         $loader = $this->getResourceLoader();
         if ($loader) {
-            $loader->addResourceType('provider', 'providers', 'Provider');
+            $loader->addResourceType('adapter', 'adapters', 'Adapter');
         }
     }
 
@@ -31,30 +32,29 @@ class Tigerimage_Bootstrap extends Zend_Application_Module_Bootstrap
      *
      * THIS is the loose coupling: core declares Tiger_Agent_Provider_ImageAdapter and holds a
      * register; it ships no image-generation code and knows nothing about which models draw. An
-     * install without this module has no image capability and reports so honestly, rather than
-     * carrying calls to an endpoint it never makes. The same path is open to a future audio, video or
-     * embedding module — none of them need to touch core.
+     * install without this module has no image capability and reports so honestly. The same path is
+     * open to a future audio, video or embedding module — none of them need to touch core.
      *
-     * FAIL-SAFE BY DESIGN. Registering a capability must never be able to take down the site. A
-     * module Bootstrap that throws is fatal during Resource_Modules — every page, not just this
-     * module's — so anything missing here degrades to "cannot draw" rather than to a white screen.
+     * CLASS NAMES, NOT INSTANCES. Nothing is constructed here, so autoload timing cannot matter and a
+     * request that never generates an image never builds an adapter. Core resolves on first use and
+     * degrades to "cannot draw" if a name turns out to be wrong.
+     *
+     * The try/catch is belt-and-braces on top of that: a module Bootstrap that throws is fatal during
+     * Resource_Modules — it takes down every page, not just this module's — and losing image
+     * generation must never be able to cost the site.
      */
-    protected function _initImageProviders()
+    protected function _initImageAdapters()
     {
-        $this->bootstrap('providerAutoload');
+        $this->bootstrap('adapterAutoload');
 
         try {
             if (!class_exists('Tiger_Agent_Provider_Factory')
                 || !method_exists('Tiger_Agent_Provider_Factory', 'registerImageAdapter')) {
-                return;   // older core: stay inert
+                return;   // older core: stay inert rather than fatal
             }
-            foreach (['openai' => 'Tigerimage_Provider_OpenAi', 'gemini' => 'Tigerimage_Provider_Gemini'] as $key => $class) {
-                if (class_exists($class)) {
-                    Tiger_Agent_Provider_Factory::registerImageAdapter($key, new $class());
-                }
-            }
+            Tiger_Agent_Provider_Factory::registerImageAdapter('openai', 'Tigerimage_Adapter_OpenAi');
+            Tiger_Agent_Provider_Factory::registerImageAdapter('gemini', 'Tigerimage_Adapter_Gemini');
         } catch (Throwable $e) {
-            // Losing image generation is a degraded feature; a fatal here is a dead site.
             if (class_exists('Tiger_Log')) {
                 Tiger_Log::error('tigerimage.register_failed', ['error' => $e->getMessage()]);
             }

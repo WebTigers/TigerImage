@@ -47,8 +47,8 @@ spl_autoload_register(static function ($class) use ($moduleRoot) {
     if (strncmp($class, 'Tigerimage_', 11) !== 0) { return; }
     if (preg_match('/^Tigerimage_Service_(.+)$/', $class, $m)) {
         $rel = 'services/' . str_replace('_', '/', $m[1]) . '.php';
-    } elseif (preg_match('/^Tigerimage_Provider_(.+)$/', $class, $m)) {
-        $rel = 'providers/' . str_replace('_', '/', $m[1]) . '.php';
+    } elseif (preg_match('/^Tigerimage_Adapter_(.+)$/', $class, $m)) {
+        $rel = 'adapters/' . str_replace('_', '/', $m[1]) . '.php';
     } elseif (preg_match('/^Tigerimage_Model_(.+)$/', $class, $m)) {
         $rel = 'models/' . str_replace('_', '/', $m[1]) . '.php';
     } elseif (preg_match('/^Tigerimage_Plugin_(.+)$/', $class, $m)) {

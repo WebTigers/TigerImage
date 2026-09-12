@@ -2,7 +2,7 @@
   "schema": "tiger.module/v1",
   "slug": "tigerimage",
   "name": "TigerImage",
-  "version": "0.2.0-beta",
+  "version": "0.3.0-beta",
   "description": "Image generation for any agent. Drives the Tiger provider adapters to turn a prompt into pictures, remembers how each one was made so it can be refined, and promotes the keepers into the Media Library. Gives a text-only assistant the ability to illustrate a page it just wrote.",
   "author": {
     "name": "WebTigers",
@@ -21,7 +21,7 @@
     "mcp"
   ],
   "requires": {
-    "tiger": ">=1.5.18",
+    "tiger": ">=1.5.19",
     "php": ">=8.1"
   },
   "type": "plugin",
@@ -37,7 +37,7 @@
     "views": "views",
     "assets": "assets",
     "languages": "languages",
-    "providers": "providers"
+    "adapters": "adapters"
   },
   "pricing": {
     "model": "free"

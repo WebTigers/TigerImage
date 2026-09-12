@@ -13,21 +13,21 @@ use PHPUnit\Framework\TestCase;
  * register, and ships no image-generation code. The transport is stubbed at the one seam each adapter
  * exposes, exactly as before — what moved is ownership, not coverage.
  */
-#[CoversClass(Tigerimage_Provider_OpenAi::class)]
-#[CoversClass(Tigerimage_Provider_Gemini::class)]
-final class ProviderAdapterTest extends TestCase
+#[CoversClass(Tigerimage_Adapter_OpenAi::class)]
+#[CoversClass(Tigerimage_Adapter_Gemini::class)]
+final class AdapterTest extends TestCase
 {
     #[Test]
     public function each_adapter_answers_for_its_own_models(): void
     {
-        $o = new Tigerimage_Provider_OpenAi();
+        $o = new Tigerimage_Adapter_OpenAi();
         $this->assertTrue($o->supportsModel('gpt-image-1'));
         $this->assertTrue($o->supportsModel('dall-e-3'));
         // the live model list exposes this one; an anchored match would have missed it
         $this->assertTrue($o->supportsModel('chatgpt-image-latest'));
         $this->assertFalse($o->supportsModel('gpt-5'));
 
-        $g = new Tigerimage_Provider_Gemini();
+        $g = new Tigerimage_Adapter_Gemini();
         $this->assertTrue($g->supportsModel('imagen-3.0-generate-002'));
         $this->assertTrue($g->supportsModel('gemini-2.5-flash-image-preview'));
         $this->assertFalse($g->supportsModel('gemini-2.5-pro'));
@@ -36,8 +36,8 @@ final class ProviderAdapterTest extends TestCase
     #[Test]
     public function both_implement_the_core_contract(): void
     {
-        $this->assertInstanceOf(Tiger_Agent_Provider_ImageAdapter::class, new Tigerimage_Provider_OpenAi());
-        $this->assertInstanceOf(Tiger_Agent_Provider_ImageAdapter::class, new Tigerimage_Provider_Gemini());
+        $this->assertInstanceOf(Tiger_Agent_Provider_ImageAdapter::class, new Tigerimage_Adapter_OpenAi());
+        $this->assertInstanceOf(Tiger_Agent_Provider_ImageAdapter::class, new Tigerimage_Adapter_Gemini());
     }
 
     /* ---- OpenAI ----------------------------------------------------------------------------- */
@@ -269,7 +269,7 @@ final class ProviderAdapterTest extends TestCase
 }
 
 /** Stubs the one cURL seam so the payload can be inspected and a canned body returned. */
-final class FakeOpenAi extends Tigerimage_Provider_OpenAi
+final class FakeOpenAi extends Tigerimage_Adapter_OpenAi
 {
     public static array $response = [];
     public static array $sent     = [];
@@ -280,7 +280,7 @@ final class FakeOpenAi extends Tigerimage_Provider_OpenAi
     }
 }
 
-final class FakeGemini extends Tigerimage_Provider_Gemini
+final class FakeGemini extends Tigerimage_Adapter_Gemini
 {
     public static array $response = [];
     public static array $sent     = [];

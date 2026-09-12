@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // Copyright (c) 2026 WebTigers. Tiger™ and WebTigers™ are trademarks of WebTigers.
 /**
- * Tigerimage_Provider_OpenAi — OpenAI image generation (TIGER-103).
+ * Tigerimage_Adapter_OpenAi — OpenAI image generation (TIGER-103).
  *
  * EXTENDS the core adapter rather than reimplementing it: transport, auth headers, error translation
  * and the base URL are all inherited, so there is one place those live. Only drawing is added here,
@@ -11,7 +11,7 @@
  * Registered by Tigerimage_Bootstrap, so an install without this module has no OpenAI image capability
  * and says so honestly.
  */
-class Tigerimage_Provider_OpenAi extends Tiger_Agent_Provider_OpenAi
+class Tigerimage_Adapter_OpenAi extends Tiger_Agent_Provider_OpenAi
     implements Tiger_Agent_Provider_ImageAdapter
 {
     /** Sizes the images endpoint accepts. A caller's request is snapped to the nearest of these. */

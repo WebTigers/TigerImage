@@ -27,8 +27,8 @@ final class ProviderResolveTest extends TestCase
     protected function setUp(): void
     {
         Tiger_Agent_Provider_Factory::clearImageAdapters();
-        Tiger_Agent_Provider_Factory::registerImageAdapter('openai', new Tigerimage_Provider_OpenAi());
-        Tiger_Agent_Provider_Factory::registerImageAdapter('gemini', new Tigerimage_Provider_Gemini());
+        Tiger_Agent_Provider_Factory::registerImageAdapter('openai', new Tigerimage_Adapter_OpenAi());
+        Tiger_Agent_Provider_Factory::registerImageAdapter('gemini', new Tigerimage_Adapter_Gemini());
     }
 
     protected function tearDown(): void

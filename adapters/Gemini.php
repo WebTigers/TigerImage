@@ -2,14 +2,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // Copyright (c) 2026 WebTigers. Tiger™ and WebTigers™ are trademarks of WebTigers.
 /**
- * Tigerimage_Provider_Gemini — Google image generation (TIGER-103).
+ * Tigerimage_Adapter_Gemini — Google image generation (TIGER-103).
  *
  * EXTENDS the core adapter so transport, the API-key header and error translation are inherited
  * rather than duplicated. Core keeps no knowledge of :predict or of which Google models draw.
  *
  * Registered by Tigerimage_Bootstrap.
  */
-class Tigerimage_Provider_Gemini extends Tiger_Agent_Provider_Gemini
+class Tigerimage_Adapter_Gemini extends Tiger_Agent_Provider_Gemini
     implements Tiger_Agent_Provider_ImageAdapter
 {
     /**
