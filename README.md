@@ -103,14 +103,39 @@ reaching **red at 10%** and below. A bar that jumps yellow → orange reads as a
 actually happening is a budget draining smoothly. An **uncapped** install shows no gauge at all —
 there is no ceiling to draw a fraction of, and a full bar would be inventing one.
 
+## Status
+
+The studio, the spend ceiling, the provider adapters, Media Library promotion and the retention sweep
+are built, and the generate → store → refine → promote path has been proven end to end against the live
+OpenAI API.
+
+**The studio has not yet been driven through a browser by a person.** Everything about it has been
+verified by rendering it server-side and by test. Three bugs that made the page unusable were found that
+way in 0.5.0-beta — dead JavaScript, untranslated strings, and two keys that did not exist — so treat
+the screen as unproven until someone has clicked through it.
+
+**Set a spend cap before connecting an agent.** Uncapped is the shipped default, and uncapped is exactly
+the configuration a generation loop can run up a bill in.
+
 ## Tests
 
 ```
-../tiger-core/vendor/bin/phpunit -c phpunit.xml
+../tiger-core/vendor/bin/phpunit -c phpunit.xml    # PHP
+node tests/js/gauge.test.js                        # the gauge's colour rule
 ```
 
 Dependencies are not vendored here; the bootstrap resolves them from a sibling `tiger-core` checkout.
+CI runs both on PHP 8.1/8.3/8.4/8.5.
+
+## Languages
+
+Ships the full six-locale UI: **en, es, pt, hi, de, fr**. A module owns its own `tigerimage.*` keys and
+its own translations — core never translates a module — and a test keeps every locale complete.
 
 ## License
 
-BSD-3-Clause. Tiger™ and WebTigers™ are trademarks of WebTigers.
+**BSD-3-Clause** — see [LICENSE](LICENSE). The Tiger / TigerImage / WebTigers **trademarks** are
+reserved and are not covered by that grant; see [TRADEMARKS.md](TRADEMARKS.md).
+
+Working in this repo? Start with [AGENTS.md](AGENTS.md). Changes are recorded in
+[CHANGELOG.md](CHANGELOG.md).
