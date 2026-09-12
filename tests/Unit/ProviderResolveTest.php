@@ -17,9 +17,38 @@ use PHPUnit\Framework\TestCase;
 #[CoversClass(Tigerimage_Model_Provider::class)]
 final class ProviderResolveTest extends TestCase
 {
+    /**
+     * Register the module's real adapters, exactly as Tigerimage_Bootstrap does.
+     *
+     * Core holds only the register now (TIGER-103), so capability is false until a module registers.
+     * Using the REAL adapters rather than fakes means these tests also prove the registration path
+     * the Bootstrap relies on.
+     */
+    protected function setUp(): void
+    {
+        Tiger_Agent_Provider_Factory::clearImageAdapters();
+        Tiger_Agent_Provider_Factory::registerImageAdapter('openai', new Tigerimage_Provider_OpenAi());
+        Tiger_Agent_Provider_Factory::registerImageAdapter('gemini', new Tigerimage_Provider_Gemini());
+    }
+
     protected function tearDown(): void
     {
+        Tiger_Agent_Provider_Factory::clearImageAdapters();
         if (Zend_Registry::isRegistered('Zend_Config')) { Zend_Registry::set('Zend_Config', null); }
+    }
+
+    /** Without the module's registration, core reports no capability at all — the loose-coupling test. */
+    #[Test]
+    public function core_alone_cannot_draw(): void
+    {
+        Tiger_Agent_Provider_Factory::clearImageAdapters();
+        $this->config(['provider' => 'openai', 'model' => 'gpt-image-1']);
+
+        $this->assertNull(Tigerimage_Model_Provider::resolve(),
+            'with no adapter registered, even a correctly configured provider cannot draw');
+        $cap = Tigerimage_Model_Provider::capability();
+        $this->assertFalse($cap['available']);
+        $this->assertSame([], $cap['providers']);
     }
 
     private function config(array $tigerimage = [], array $agent = []): void
@@ -107,14 +136,24 @@ final class ProviderResolveTest extends TestCase
         $this->assertSame('openai', $cap['provider']);
     }
 
+    /**
+     * Every listed provider must have a REGISTERED adapter — not merely a core adapter of the same
+     * name. Factory::make() returns the core TEXT adapter, which by design cannot draw, so asking it
+     * would now be the wrong question (TIGER-103).
+     */
     #[Test]
-    public function every_listed_provider_can_actually_draw(): void
+    public function every_listed_provider_has_a_registered_drawing_adapter(): void
     {
-        foreach (Tiger_Agent_Provider_Factory::imageProviders() as $p) {
-            $this->assertTrue(
-                Tiger_Agent_Provider_Factory::make($p) instanceof Tiger_Agent_Provider_ImageAdapter,
-                "$p is listed as an image provider but its adapter cannot draw"
-            );
+        $listed = Tiger_Agent_Provider_Factory::imageProviders();
+        $this->assertNotEmpty($listed, 'the module registered adapters in setUp');
+
+        foreach ($listed as $p) {
+            $adapter = Tiger_Agent_Provider_Factory::imageAdapter($p);
+            $this->assertInstanceOf(Tiger_Agent_Provider_ImageAdapter::class, $adapter,
+                "$p is listed but has no registered image adapter");
+            $this->assertNotInstanceOf(Tiger_Agent_Provider_ImageAdapter::class,
+                Tiger_Agent_Provider_Factory::make($p),
+                "the CORE adapter for $p must not draw — that is the coupling this removed");
         }
     }
 }

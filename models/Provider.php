@@ -115,14 +115,19 @@ class Tigerimage_Model_Provider
         ];
     }
 
-    /** A drawing model for a provider, when one was not named. */
+    /**
+     * A drawing model for a provider, when one was not named.
+     *
+     * Asks the REGISTERED ADAPTER which of the provider's models it can draw with — core no longer
+     * holds that knowledge (TIGER-103).
+     */
     protected static function _firstDrawingModel($provider)
     {
+        $adapter = Tiger_Agent_Provider_Factory::imageAdapter($provider);
+        if ($adapter === null) { return ''; }
         foreach (Tiger_Agent_Provider_Factory::staticModels($provider) as $m) {
             $id = (string) ($m['id'] ?? '');
-            if ($id !== '' && Tiger_Agent_Provider_Factory::supportsImageGeneration($provider, $id)) {
-                return $id;
-            }
+            if ($id !== '' && $adapter->supportsModel($id)) { return $id; }
         }
         return '';
     }

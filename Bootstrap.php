@@ -5,12 +5,29 @@
  * TigerImage module bootstrap.
  *
  * Extending Zend_Application_Module_Bootstrap gives the module its resource autoloader, so
- * Tigerimage_Service_* (services/) and Tigerimage_Model_* (models/) load by convention;
- * configs/acl.ini + languages/ are picked up by the core globs.
- *
- * Deliberately thin: this module registers no front-controller plugin and no view helper. Its whole
- * surface is services, which the core reflects into /api and therefore into MCP.
+ * Tigerimage_Service_* (services/), Tigerimage_Model_* (models/) and Tigerimage_Provider_*
+ * (providers/) load by convention; configs/acl.ini + languages/ are picked up by the core globs.
  */
 class Tigerimage_Bootstrap extends Zend_Application_Module_Bootstrap
 {
+    /**
+     * Register this module's image adapters with the core provider registry (TIGER-103).
+     *
+     * THIS is the loose coupling: core declares Tiger_Agent_Provider_ImageAdapter and holds a
+     * register; it ships no image-generation code and knows nothing about which models draw. An
+     * install without this module has no image capability and reports so honestly, rather than
+     * carrying calls to an endpoint it never makes.
+     *
+     * The same path is open to any future audio, video or embedding module — none of them need to
+     * touch core.
+     */
+    protected function _initImageProviders()
+    {
+        if (!class_exists('Tiger_Agent_Provider_Factory')
+            || !method_exists('Tiger_Agent_Provider_Factory', 'registerImageAdapter')) {
+            return;   // older core: stay inert rather than fatal
+        }
+        Tiger_Agent_Provider_Factory::registerImageAdapter('openai', new Tigerimage_Provider_OpenAi());
+        Tiger_Agent_Provider_Factory::registerImageAdapter('gemini', new Tigerimage_Provider_Gemini());
+    }
 }

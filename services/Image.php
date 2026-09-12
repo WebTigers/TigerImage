@@ -93,8 +93,10 @@ class Tigerimage_Service_Image extends Tiger_Service_Service
         }
 
         $resolved = Tigerimage_Model_Provider::resolve();
-        $adapter  = Tiger_Agent_Provider_Factory::make($resolved['provider']);
-        if (!$adapter instanceof Tiger_Agent_Provider_ImageAdapter) {
+        // The REGISTERED image adapter, not Factory::make() — make() returns the core text adapter,
+        // which by design cannot draw (TIGER-103).
+        $adapter  = Tiger_Agent_Provider_Factory::imageAdapter($resolved['provider']);
+        if ($adapter === null) {
             $this->_error('tigerimage.error.provider_cannot_draw');
             return;
         }

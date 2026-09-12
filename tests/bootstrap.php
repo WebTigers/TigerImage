@@ -47,6 +47,8 @@ spl_autoload_register(static function ($class) use ($moduleRoot) {
     if (strncmp($class, 'Tigerimage_', 11) !== 0) { return; }
     if (preg_match('/^Tigerimage_Service_(.+)$/', $class, $m)) {
         $rel = 'services/' . str_replace('_', '/', $m[1]) . '.php';
+    } elseif (preg_match('/^Tigerimage_Provider_(.+)$/', $class, $m)) {
+        $rel = 'providers/' . str_replace('_', '/', $m[1]) . '.php';
     } elseif (preg_match('/^Tigerimage_Model_(.+)$/', $class, $m)) {
         $rel = 'models/' . str_replace('_', '/', $m[1]) . '.php';
     } elseif (preg_match('/^Tigerimage_Plugin_(.+)$/', $class, $m)) {
@@ -54,7 +56,7 @@ spl_autoload_register(static function ($class) use ($moduleRoot) {
     } elseif (preg_match('/^Tigerimage_(.+)Controller$/', $class, $m)) {
         $rel = 'controllers/' . $m[1] . 'Controller.php';
     } else {
-        $rel = str_replace('_', '/', substr($class, 12)) . '.php';
+        $rel = str_replace('_', '/', substr($class, 11)) . '.php';
     }
     $file = $moduleRoot . '/' . $rel;
     if (is_file($file)) { require $file; }

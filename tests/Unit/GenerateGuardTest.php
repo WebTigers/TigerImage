@@ -20,7 +20,7 @@ final class GenerateGuardTest extends TestCase
     protected function tearDown(): void
     {
         SpyImageAdapter::$calls = 0;
-        Tiger_Agent_Provider_Factory::setAdapter(null);
+        Tiger_Agent_Provider_Factory::clearImageAdapters();
         if (Zend_Registry::isRegistered('Zend_Config')) { Zend_Registry::set('Zend_Config', null); }
     }
 
@@ -29,7 +29,7 @@ final class GenerateGuardTest extends TestCase
         Zend_Registry::set('Zend_Config', new Zend_Config([
             'tigerimage' => ['provider' => 'openai', 'model' => 'gpt-image-1', 'spend' => $spend],
         ]));
-        Tiger_Agent_Provider_Factory::setAdapter(new SpyImageAdapter());
+        Tiger_Agent_Provider_Factory::registerImageAdapter('openai', new SpyImageAdapter());
         return new GuardableImageService();
     }
 
@@ -87,6 +87,7 @@ final class SpyImageAdapter implements Tiger_Agent_Provider_Adapter, Tiger_Agent
     public static int $calls = 0;
     public function complete($system, array $messages, $model, $apiKey) { return ['text' => '', 'usage' => []]; }
     public function models($apiKey = '') { return []; }
+    public function supportsModel($model) { return true; }
     public function generateImage($prompt, array $options, $model, $apiKey)
     {
         self::$calls++;

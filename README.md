@@ -11,8 +11,11 @@ Free, BSD-3, first-party.
 
 ## How it works
 
-- **Providers** come from the Tiger agent adapters, so your existing BYO keys work unchanged.
-  `Tiger_Agent_Provider_ImageAdapter` is implemented by adapters that can draw (OpenAI, Gemini today).
+- **Providers** are this module's own adapters, subclassing the core ones so transport, auth headers
+  and your existing BYO keys are reused rather than duplicated. They are **registered with core at
+  bootstrap** via `Tiger_Agent_Provider_Factory::registerImageAdapter()` — core declares the
+  `ImageAdapter` contract and holds the register, and ships no image-generation code itself. Uninstall
+  this module and Tiger honestly reports that it cannot draw.
 - **Generated images are drafts.** They land in temp storage and are *not* in the Media Library. The
   library stays curated.
 - **Promotion** is the moment someone says "keep this" — it creates the Media row, with the prompt as
@@ -24,7 +27,7 @@ Free, BSD-3, first-party.
 
 ## Installing
 
-Needs **tiger-core 1.5.17+** (the release carrying `Tiger_Agent_Provider_ImageAdapter`).
+Needs **tiger-core 1.5.18+** (the release where image adapters became a registry).
 
 App modules are **opt-in**: dropping the files in and running the migration is not enough — the module
 stays inert until it has an `active=1` row, because `Resource_Modules` strips inactive modules from the
