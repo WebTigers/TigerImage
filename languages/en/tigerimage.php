@@ -56,8 +56,8 @@ return [
     'tigerimage.detail.model'            => 'Model',
     'tigerimage.detail.size'             => 'Size',
     'tigerimage.detail.lineage'          => 'Lineage',
-    // %1$s = how many steps in the chain, %2$s = which one this image is.
-    'tigerimage.detail.lineage_note'     => '%1$s steps — this image is #%2$s in the chain.',
+    // %s = how many steps in the chain, %s = which one this image is.
+    'tigerimage.detail.lineage_note'     => '%s steps — this image is #%s in the chain.',
     'tigerimage.error.list_failed'       => 'Could not load your images.',
     'tigerimage.error.get_failed'        => 'Could not load that image.',
     'tigerimage.error.refine_failed'     => 'Could not refine that image.',
