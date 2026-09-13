@@ -316,12 +316,24 @@ final class ConventionsTest extends TestCase
                 "$lang defines keys en does not — one of the two is wrong");
 
             foreach ($en as $key => $source) {
-                preg_match_all('~%\d?\$?s~', (string) $source, $want);
-                preg_match_all('~%\d?\$?s~', (string) $strings[$key], $got);
-                sort($want[0]);
-                sort($got[0]);
-                $this->assertSame($want[0], $got[0],
+                // Compared as a SET of slot types, not by number or position: a translation may say
+                // %2$s before %1$s — that is what numbering is for. Losing or inventing one is the bug.
+                $slot = static fn ($p) => substr($p, -1);
+                preg_match_all('~%(?:\d+\$)?[sd]~', (string) $source, $want);
+                preg_match_all('~%(?:\d+\$)?[sd]~', (string) $strings[$key], $got);
+                $want = array_map($slot, $want[0]); $got = array_map($slot, $got[0]);
+                sort($want); sort($got);
+                $this->assertSame($want, $got,
                     "$lang: '$key' does not carry the same placeholders as en");
+
+                // Two or more arguments MUST be numbered (TIGER-121), or a translator cannot reorder.
+                preg_match_all('~%(?:\d+\$)?[sd]~', (string) $strings[$key], $all);
+                if (count($all[0]) >= 2) {
+                    foreach ($all[0] as $ph) {
+                        $this->assertMatchesRegularExpression('~^%\d+\$~', $ph,
+                            "$lang: '$key' takes " . count($all[0]) . " arguments but uses sequential '$ph' — number them");
+                    }
+                }
                 if ($lang !== 'en') {
                     $this->assertNotSame('', trim((string) $strings[$key]), "$lang: '$key' is empty");
                 }

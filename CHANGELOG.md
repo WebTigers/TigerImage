@@ -4,6 +4,20 @@ All notable changes to TigerImage are recorded here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versioning is SemVer with a `-beta` stability suffix
 while pre-1.0.
 
+## [1.0.2] — 2026-09-13
+
+### Changed
+- **`tigerimage.detail.lineage_note` uses numbered placeholders** (`%1$s`, `%2$s`) so a translator can
+  reorder them. 1.0.1 had converted it to sequential `%s` to match `Tiger.t()`; core 1.5.22 fixed
+  `Tiger.t()` instead, which was the right end to fix. Requires **tiger-core 1.5.22+**.
+- The locale-completeness test now compares placeholders as a set of slot *types* rather than exact
+  tokens — so a reordered translation is allowed — and fails any multi-argument string that is not
+  numbered.
+
+### Removed
+- `tigerimage.budget.remaining` — added in 0.5.0-beta and never rendered; the gauge formats its own
+  figures. Six locales were carrying a string nobody used.
+
 ## [1.0.1] — 2026-09-13
 
 ### Changed
