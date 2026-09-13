@@ -98,48 +98,46 @@ $binding = !empty($spend['binding']) ? (array) $spend['binding'] : null;
 </form>
 
 <?php
-// Strings the JavaScript renders (TIGER-107).
+// Strings the JavaScript renders, registered through CORE's helper (TIGER-120).
 //
-// A JSON map in a DATA ATTRIBUTE, not an inline <script>: the house rule forbids inline script in a
-// view, and this needs no serialiser on the server beyond json_encode and one JSON.parse on the
-// client. FULL keys, not short ones, so the convention sweep that checks every emitted
-// `tigerimage.*` key exists reaches the JavaScript too — a short key would have hidden it.
+// Tiger_View_Helper_I18n accumulates these into one carrier that the admin layout emits, which
+// tiger.i18n.js reads to expose Tiger.t(). TIGER-107 hand-rolled an identical mechanism here before
+// I found the core one; this is that duplicate removed.
 //
-// Anything the JS puts in front of a user belongs in this list. It is the contract between the two
-// files, and a test asserts the JS asks for nothing that is not here.
-$jsKeys = [
-    'tigerimage.action.details',
-    'tigerimage.action.refine',
-    'tigerimage.action.refine_from_this',
-    'tigerimage.action.keep',
-    'tigerimage.action.bin',
-    'tigerimage.action.bin_confirm',
-    'tigerimage.action.generate',
-    'tigerimage.action.cancel',
-    'tigerimage.state.in_media',
-    'tigerimage.confirm.bin_title',
-    'tigerimage.confirm.bin_body',
-    'tigerimage.detail.title',
-    'tigerimage.detail.prompt',
-    'tigerimage.detail.alt',
-    'tigerimage.detail.how_made',
-    'tigerimage.detail.provider',
-    'tigerimage.detail.model',
-    'tigerimage.detail.size',
-    'tigerimage.detail.lineage',
-    'tigerimage.detail.lineage_note',
-    'tigerimage.error.list_failed',
-    'tigerimage.error.get_failed',
-    'tigerimage.error.refine_failed',
-    'tigerimage.error.discard_failed',
-    'tigerimage.error.generation_failed',
-    'tigerimage.error.promote_failed',
-];
-$jsStrings = [];
-foreach ($jsKeys as $k) { $jsStrings[$k] = $this->t($k); }
+// ALIASES, not full keys — core's deliberate choice and a better one than mine. The payload that
+// reaches the page carries translated TEXT under generic names, so viewing source never exposes this
+// module's `tigerimage.<area>.<type>` key taxonomy, including the shape of keys that were not shipped.
+//
+// Anything the JS puts in front of a user belongs in this map. It is the contract between the two
+// files, and a test asserts the JS asks for no alias that is not registered here.
+$this->i18n([
+    'details'          => 'tigerimage.action.details',
+    'refine'           => 'tigerimage.action.refine',
+    'refineFrom'       => 'tigerimage.action.refine_from_this',
+    'keep'             => 'tigerimage.action.keep',
+    'bin'              => 'tigerimage.action.bin',
+    'binConfirm'       => 'tigerimage.action.bin_confirm',
+    'generate'         => 'tigerimage.action.generate',
+    'inMedia'          => 'tigerimage.state.in_media',
+    'binTitle'         => 'tigerimage.confirm.bin_title',
+    'binBody'          => 'tigerimage.confirm.bin_body',
+    'detailTitle'      => 'tigerimage.detail.title',
+    'prompt'           => 'tigerimage.detail.prompt',
+    'alt'              => 'tigerimage.detail.alt',
+    'howMade'          => 'tigerimage.detail.how_made',
+    'provider'         => 'tigerimage.detail.provider',
+    'model'            => 'tigerimage.detail.model',
+    'size'             => 'tigerimage.detail.size',
+    'lineage'          => 'tigerimage.detail.lineage',
+    'lineageNote'      => 'tigerimage.detail.lineage_note',
+    'listFailed'       => 'tigerimage.error.list_failed',
+    'getFailed'        => 'tigerimage.error.get_failed',
+    'refineFailed'     => 'tigerimage.error.refine_failed',
+    'discardFailed'    => 'tigerimage.error.discard_failed',
+    'generationFailed' => 'tigerimage.error.generation_failed',
+    'promoteFailed'    => 'tigerimage.error.promote_failed',
+]);
 ?>
-<div id="ti-strings" hidden
-     data-strings="<?= $this->escape(json_encode($jsStrings, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?>"></div>
 
 <?php // The grid. Populated from /api; each tile carries its own id so refine/promote/discard work per-image. ?>
 <div id="ti-grid" class="row row-cols-2 row-cols-md-3 row-cols-xl-4 g-3" aria-live="polite"></div>

@@ -190,36 +190,55 @@ final class ConventionsTest extends TestCase
         return (string) file_get_contents($this->root() . '/assets/js/tigerimage.studio.js');
     }
 
-    /** The keys the VIEW promises to send to the JS, read from its $jsKeys list. */
-    private function jsKeysFromView(): array
+    /** The aliases the VIEW registers with core's i18n helper, alias => translation key. */
+    private function registeredAliases(): array
     {
         $src = file_get_contents($this->root() . '/views/scripts/studio/index.phtml');
-        if (!preg_match('~\$jsKeys\s*=\s*\[(.*?)\];~s', $src, $m)) { return []; }
-        preg_match_all("~'([^']+)'~", $m[1], $k);
-        return $k[1];
+        if (!preg_match('~\$this->i18n\(\s*\[(.*?)\]\s*\);~s', $src, $m)) { return []; }
+        preg_match_all("~'([^']+)'\s*=>\s*'([^']+)'~", $m[1], $k, PREG_SET_ORDER);
+        $out = [];
+        foreach ($k as $pair) { $out[$pair[1]] = $pair[2]; }
+        return $out;
     }
 
     /**
-     * The JS must ask for nothing the view does not send.
+     * The JS must ask for no alias the view has not registered.
      *
-     * This is the contract between the two files, and it is the failure mode the mechanism invites:
-     * add a `t('…')` call, forget the key in the view's list, and the button silently renders its own
-     * key name. Nothing else would catch it — the key exists in the language file, so the key sweep
-     * is happy.
+     * This is the contract between the two files and the failure mode the mechanism invites: add a
+     * `t('…')` call, forget the alias in the view's map, and Tiger.t returns the alias itself — a
+     * button quietly reading "keep". Nothing else catches it. The translation key exists, so the key
+     * sweep is happy, and an alias on screen looks far more like a real word than a full key did.
      */
     #[Test]
-    public function the_view_sends_every_string_the_js_asks_for(): void
+    public function the_view_registers_every_alias_the_js_asks_for(): void
     {
-        $promised = $this->jsKeysFromView();
-        $this->assertNotEmpty($promised, 'the view has no $jsKeys list — the mechanism is gone');
+        $registered = $this->registeredAliases();
+        $this->assertNotEmpty($registered, 'the view registers no strings — the i18n map is gone');
 
-        preg_match_all("~\btf?\(\s*'(tigerimage\.[a-z0-9_.]+)'~", $this->studioJs(), $m);
+        preg_match_all("~\bt\(\s*'([A-Za-z][A-Za-z0-9_]*)'~", $this->studioJs(), $m);
         $asked = array_unique($m[1]);
         $this->assertNotEmpty($asked, 'the JS asks for no strings — the pattern changed');
 
-        foreach ($asked as $key) {
-            $this->assertContains($key, $promised,
-                "the JS renders '$key' but the view's \$jsKeys list does not send it — it would show the raw key");
+        foreach ($asked as $alias) {
+            $this->assertArrayHasKey($alias, $registered,
+                "the JS renders '$alias' but the view does not register it — Tiger.t would print the alias");
+        }
+    }
+
+    /** Every alias the view registers must map to a key that exists, and be used by the JS. */
+    #[Test]
+    public function the_registered_aliases_are_real_and_used(): void
+    {
+        $registered = $this->registeredAliases();
+        $strings    = [];
+        foreach (glob($this->root() . '/languages/en/*.php') ?: [] as $f) { $strings += (array) include $f; }
+
+        preg_match_all("~\bt\(\s*'([A-Za-z][A-Za-z0-9_]*)'~", $this->studioJs(), $m);
+        $asked = array_unique($m[1]);
+
+        foreach ($registered as $alias => $key) {
+            $this->assertArrayHasKey($key, $strings, "alias '$alias' maps to '$key', which has no English string");
+            $this->assertContains($alias, $asked, "alias '$alias' is registered but no longer used — dead weight in every page");
         }
     }
 
@@ -259,7 +278,10 @@ final class ConventionsTest extends TestCase
             }
         }
 
-        $this->assertStringContainsString("function t(key)", $src, 'the t() helper is gone');
+        $this->assertMatchesRegularExpression('~\bvar t =~', $src,
+            'the t() binding to core\'s Tiger.t is gone');
+        $this->assertStringContainsString('window.Tiger', $src,
+            'strings must come from core\'s helper, not a private copy (TIGER-120)');
     }
 
     /**

@@ -4,6 +4,25 @@ All notable changes to TigerImage are recorded here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versioning is SemVer with a `-beta` stability suffix
 while pre-1.0.
 
+## [1.0.1] — 2026-09-13
+
+### Changed
+- **The studio's JavaScript now gets its strings from core's `Tiger_View_Helper_I18n`** instead of a
+  private copy. 1.0.0 shipped a hand-rolled mechanism — the view JSON-encoding a map into a data
+  attribute, the script reading it through its own `t()`. Core already did exactly that, with a shared
+  `tiger.i18n.js`, a view-registers / layout-emits seam, and attribute-escaping that survives an
+  admin-authored translation override. The duplicate is gone.
+
+- **Page source no longer carries this module's translation keys.** The old version shipped full keys
+  (`tigerimage.action.keep`) to every rendered page; core deliberately delivers translated *values*
+  under generic aliases, so the `tigerimage.<area>.<type>` taxonomy — including the shape of keys that
+  were never shipped — is no longer readable in the HTML. That is the better design and the reason to
+  use core's helper rather than a local one.
+
+- Interpolated strings use `%s` rather than numbered `%1$s`, matching `Tiger.t()`. All six locales
+  already filled their two placeholders in the same order, so nothing reads differently. A locale that
+  genuinely needs to reorder them would need numbered-placeholder support in core first.
+
 ## [1.0.0] — 2026-09-12
 
 **1.0** — the module line follows Tiger 1.0.

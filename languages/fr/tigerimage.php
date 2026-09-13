@@ -8,7 +8,7 @@
  * [key => string] array. A module owns its own `tigerimage.*` keys and ships its own translations
  * for every locale — core never translates a module.
  *
- * Placeholders (%1$s, %2$s) may be REORDERED to suit the language; tf() in the studio JS and
+ * Placeholders (%s, %s) may be REORDERED to suit the language; tf() in the studio JS and
  * sprintf() on the server both address them by number.
  */
 return [
@@ -57,7 +57,7 @@ return [
     'tigerimage.detail.model' => 'Modèle',
     'tigerimage.detail.size' => 'Taille',
     'tigerimage.detail.lineage' => 'Historique',
-    'tigerimage.detail.lineage_note' => '%1$s étapes — cette image est la n° %2$s de la chaîne.',
+    'tigerimage.detail.lineage_note' => '%s étapes — cette image est la n° %s de la chaîne.',
     'tigerimage.error.list_failed' => 'Impossible de charger vos images.',
     'tigerimage.error.get_failed' => 'Impossible de charger cette image.',
     'tigerimage.error.refine_failed' => 'Impossible d\'affiner cette image.',
