@@ -56,8 +56,10 @@ return [
     'tigerimage.detail.model'            => 'Model',
     'tigerimage.detail.size'             => 'Size',
     'tigerimage.detail.lineage'          => 'Lineage',
-    // %s = how many steps in the chain, %s = which one this image is.
-    'tigerimage.detail.lineage_note'     => '%s steps — this image is #%s in the chain.',
+    // Numbered on purpose (TIGER-121): %1$s = how many steps, %2$s = which one this image is. A
+    // translator may reorder them; sequential %s would lock every language into English word order.
+    // Needs tiger-core 1.5.22+, where Tiger.t() fills numbered placeholders.
+    'tigerimage.detail.lineage_note' => '%1$s steps — this image is #%2$s in the chain.',
     'tigerimage.error.list_failed'       => 'Could not load your images.',
     'tigerimage.error.get_failed'        => 'Could not load that image.',
     'tigerimage.error.refine_failed'     => 'Could not refine that image.',
@@ -67,7 +69,6 @@ return [
     'tigerimage.error.spend_cap_reached_token' => 'The monthly image budget for this access key is used up.',
 
     'tigerimage.budget.label'               => 'Budget',
-    'tigerimage.budget.remaining'           => '%s of %s left this month',
     'tigerimage.budget.org'                 => 'This organisation\'s monthly image budget.',
     'tigerimage.budget.token'               => 'This access key\'s monthly image budget.',
     'tigerimage.budget.estimated'           => 'Estimated, not billed.',
