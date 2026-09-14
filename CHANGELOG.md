@@ -4,6 +4,14 @@ All notable changes to TigerImage are recorded here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versioning is SemVer with a `-beta` stability suffix
 while pre-1.0.
 
+## [1.0.4] — 2026-09-13
+
+### Fixed
+- **`configs/routes.ini` was never read.** It declared bare `routes.*`; Tiger's ingester reads
+  `resources.router.routes.*`. The file parsed, matched nothing, and errored nowhere — the studio's URLs
+  worked only because they happened to coincide with default `module/controller/action` routing. Fixed,
+  and a convention test now fails on the bare shape (TIGER-122).
+
 ## [1.0.3] — 2026-09-13
 
 ### Changed
