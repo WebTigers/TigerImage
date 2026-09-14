@@ -351,6 +351,36 @@ final class ConventionsTest extends TestCase
         }
     }
 
+    /**
+     * routes.ini must be in the shape Tiger's ingester reads (TIGER-122).
+     *
+     * Tiger_Routing_ModuleRoutes navigates to `resources.router.routes.*`. This file was written as
+     * bare `routes.*`, which parsed fine, matched nothing, and errored nowhere — the studio's URLs
+     * worked only because they happened to coincide with default module/controller/action routing.
+     * The file was decorative for its whole life until this test.
+     */
+    #[Test]
+    public function routes_ini_declares_routes_where_the_ingester_looks(): void
+    {
+        $f = $this->root() . '/configs/routes.ini';
+        $this->assertFileExists($f);
+        $raw = file_get_contents($f);
+        $this->assertDoesNotMatchRegularExpression('~^\s*routes\.~m', $raw,
+            'bare `routes.*` is never read — the ingester wants `resources.router.routes.*`');
+
+        $cfg    = new \Zend_Config_Ini($f, 'production');
+        $res    = $cfg->get('resources');
+        $router = $res ? $res->get('router') : null;
+        $routes = $router ? $router->get('routes') : null;
+        $this->assertNotNull($routes, 'no resources.router.routes node');
+        $this->assertGreaterThan(0, count($routes->toArray()));
+        foreach ($routes->toArray() as $name => $r) {
+            foreach (['module', 'controller', 'action'] as $k) {
+                $this->assertArrayHasKey($k, $r['defaults'] ?? [], "$name defaults lack $k");
+            }
+        }
+    }
+
     /** Every key the code emits must exist, or the UI shows a raw key to a user. */
     #[Test]
     public function every_tigerimage_key_is_defined(): void
