@@ -100,6 +100,39 @@ final class ProviderResolveTest extends TestCase
         );
     }
 
+    /**
+     * The wire Beau asked for (TIGER-147): the agent is set to a DRAWING provider (OpenAI) but with a
+     * TEXT model (gpt-4.1, the agent's chat choice). TigerImage should still draw — reusing the same
+     * provider + key with that provider's DEFAULT image model — so a second config is never needed.
+     */
+    #[Test]
+    public function the_agent_provider_and_key_satisfy_images_even_on_a_text_model(): void
+    {
+        $this->config([], ['provider' => 'openai', 'model' => 'gpt-4.1']);   // agent: OpenAI, a TEXT model
+        $r = Tigerimage_Model_Provider::resolve();
+        $this->assertNotNull($r, 'OpenAI can draw, so the agent provider must satisfy images');
+        $this->assertSame('openai', $r['provider']);
+        $this->assertSame('agent', $r['source'], 'reuses the agent provider + key');
+        $this->assertTrue(Tiger_Agent_Provider_Factory::canGenerateImages($r['provider'], $r['model']),
+            'resolved to an actual drawing model (the provider default), not the agent text model');
+        $this->assertNotSame('gpt-4.1', $r['model']);
+        // No key set here, so capability is not yet available — but the reason has shifted from
+        // "nothing can draw" to "a provider is recognized, add its key" (before the wire it was
+        // no_image_provider). That shift IS the fix.
+        $cap = Tigerimage_Model_Provider::capability();
+        $this->assertFalse($cap['available']);
+        $this->assertSame('no_api_key', $cap['reason'], 'the agent provider is recognized as image-capable; only the key is missing');
+        $this->assertStringContainsString('agent settings', $cap['detail']);
+    }
+
+    /** A non-drawing agent provider (Anthropic) still cannot draw, whatever its model. */
+    #[Test]
+    public function a_non_drawing_agent_provider_still_cannot_draw(): void
+    {
+        $this->config([], ['provider' => 'anthropic', 'model' => 'claude-opus-5']);
+        $this->assertNull(Tigerimage_Model_Provider::resolve());
+    }
+
     #[Test]
     public function nothing_configured_and_no_capable_agent_is_unavailable(): void
     {

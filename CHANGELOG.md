@@ -4,6 +4,20 @@ All notable changes to TigerImage are recorded here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versioning is SemVer with a `-beta` stability suffix
 while pre-1.0.
 
+## [1.0.7] — 2026-09-16
+
+### Changed
+
+- **The agent's provider + key now satisfy image capability (TIGER-147).** The agent picks a provider
+  and key for chat; when that provider can draw (OpenAI, Gemini) TigerImage reuses the SAME provider
+  and key for images, choosing the provider's DEFAULT image model rather than requiring the agent's
+  (text) model to itself be an image model. So an install whose agent is OpenAI + a key just draws —
+  no separate `tigerimage.provider`/`tigerimage.model` needed. An agent on a provider that cannot draw
+  (Anthropic) still reports unavailable, honestly. New `defaultModel()` on the OpenAI (`gpt-image-1`)
+  and Gemini (`imagen-3.0-generate-002`) adapters; the "no key" guidance now points at AI agent
+  settings when the agent provider is the one that would draw. Verified live: agent `openai`/`gpt-4.1`
+  + key → resolves to `openai`/`gpt-image-1`, capability available.
+
 ## [1.0.6] — 2026-09-16
 
 ### Added

@@ -35,6 +35,19 @@ class Tigerimage_Adapter_OpenAi extends Tiger_Agent_Provider_OpenAi
     }
 
     /**
+     * The provider's default image model — used when the agent supplies a TEXT model (its own choice
+     * for chat) but this provider can still draw. Reusing the agent's provider + key for images then
+     * "just works" without a separate TigerImage provider config (TIGER-147). Must be a model
+     * supportsModel() accepts.
+     *
+     * @return string
+     */
+    public function defaultModel()
+    {
+        return 'gpt-image-1';   // OpenAI's current general-purpose image model; returns base64, no allowlist to age out
+    }
+
+    /**
      * Generate images via `POST /images/generations` (TIGER-96).
      *
      * A different endpoint from chat — which is exactly why this is a separate interface rather than

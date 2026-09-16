@@ -25,6 +25,19 @@ class Tigerimage_Adapter_Gemini extends Tiger_Agent_Provider_Gemini
     }
 
     /**
+     * The provider's default image model — used when the agent supplies a TEXT model (its own choice
+     * for chat) but this provider can still draw. Reusing the agent's provider + key for images then
+     * "just works" without a separate TigerImage provider config (TIGER-147). Must be a model
+     * supportsModel() accepts.
+     *
+     * @return string
+     */
+    public function defaultModel()
+    {
+        return 'imagen-3.0-generate-002';   // a current dedicated Imagen model (the :predict path)
+    }
+
+    /**
      * Generate images (TIGER-96).
      *
      * Google splits this across two shapes and the adapter hides the split, which is the whole

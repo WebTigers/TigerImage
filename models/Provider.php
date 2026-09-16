@@ -45,8 +45,13 @@ class Tigerimage_Model_Provider
         if (class_exists('Tiger_Agent')) {
             $p = Tiger_Agent::provider();
             $m = Tiger_Agent::model();
-            if (Tiger_Agent_Provider_Factory::canGenerateImages($p, $m)) {
-                return ['provider' => $p, 'model' => $m, 'source' => 'agent'];
+            // The agent picks a provider + key for TEXT. Images reuse the SAME provider + key but need
+            // a drawing model: use the agent's model if it can draw, else this provider's default image
+            // model. So setting the agent to OpenAI (or Gemini) with a key is enough to draw — no
+            // second TigerImage provider config required (TIGER-147).
+            $model = ($m !== '' && Tiger_Agent_Provider_Factory::canGenerateImages($p, $m)) ? $m : self::_firstDrawingModel($p);
+            if ($model !== '' && Tiger_Agent_Provider_Factory::canGenerateImages($p, $model)) {
+                return ['provider' => $p, 'model' => $model, 'source' => 'agent'];
             }
         }
         return null;
@@ -99,7 +104,9 @@ class Tigerimage_Model_Provider
             return [
                 'available' => false,
                 'reason'    => 'no_api_key',
-                'detail'    => 'An image provider is configured but has no usable API key.',
+                'detail'    => ($resolved['source'] ?? '') === 'agent'
+                    ? ucfirst($resolved['provider']) . ' can generate images — add its API key in AI agent settings and it works, no separate image provider needed.'
+                    : 'An image provider is configured but has no usable API key.',
                 'provider'  => $resolved['provider'],
                 'model'     => $resolved['model'],
                 'providers' => $providers,
@@ -128,6 +135,12 @@ class Tigerimage_Model_Provider
         foreach (Tiger_Agent_Provider_Factory::staticModels($provider) as $m) {
             $id = (string) ($m['id'] ?? '');
             if ($id !== '' && $adapter->supportsModel($id)) { return $id; }
+        }
+        // The static roster is chat/text models; a provider that draws (openai, gemini) has no image
+        // model there. Ask the adapter for its own default so the agent's provider + key can draw.
+        if (method_exists($adapter, 'defaultModel')) {
+            $d = (string) $adapter->defaultModel();
+            if ($d !== '' && $adapter->supportsModel($d)) { return $d; }
         }
         return '';
     }
