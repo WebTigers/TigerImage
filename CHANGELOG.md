@@ -4,6 +4,25 @@ All notable changes to TigerImage are recorded here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versioning is SemVer with a `-beta` stability suffix
 while pre-1.0.
 
+## [1.0.5] — 2026-09-16
+
+### Fixed
+
+- **The agent could never see TigerImage.** `configs/acl.ini` used an invented
+  `acl.resources.<Class>.allow.<role>` shape that `Tiger_Acl_Acl` does not read — so NO resource and
+  NO rule were registered, `Tigerimage_Service_Image`/`_Library` stayed unknown to `Zend_Acl`, and
+  deny-by-default excluded them from the agent's `/api`/MCP tool catalog. The module installed, read
+  **Active**, its route resolved — but it exposed zero tools, silently. Rewritten to the correct
+  format (`acl.resources.{k}.resource` + `acl.rules.{k}.role/.resource/.permission`) for the Image
+  and Library services and the Studio controller, granted to admin + developer. Verified live: the
+  module's 11 tools (generate, refine, capability, promote, …) now appear in `tools/list`.
+- Added the missing `[staging : production]` / `[testing : production]` / `[development : production]`
+  inheritance sections — without them `acl.ini` threw on any non-production env and was skipped whole
+  (the "Section 'development' cannot be found" error on dev installs).
+- Guard test (`AclFormatTest`): rejects the dead `.allow.` shape, requires every `@api` service to be
+  a declared+granted resource, and requires the env sections. This is the same config-format class as
+  the routes.ini bug (TIGER-122); now both are held by tests. (TIGER-147)
+
 ## [1.0.4] — 2026-09-13
 
 ### Fixed
