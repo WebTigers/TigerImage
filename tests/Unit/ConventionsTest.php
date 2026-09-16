@@ -430,4 +430,27 @@ final class ConventionsTest extends TestCase
         $this->assertSame('free', $m['pricing']['model'], 'TigerImage is a free public module');
         $this->assertSame('BSD-3-Clause', $m['license']);
     }
+
+    /**
+     * The studio must talk to /api the way /api actually READS a request — form-encoded fields, flat.
+     *
+     * Tiger's /api gateway resolves module/service/method and the payload from POST form fields
+     * (WEBSERVICES.md §2/§6); PHP never populates $_POST from a raw JSON body, so a
+     * `Content-Type: application/json` request arrives with no routing fields and every call fails
+     * generically ("Something went wrong"). The studio shipped exactly that bug — a JSON body with a
+     * nested `params` object — so the whole screen was dead in a browser while the unit tests (which
+     * call the service directly) stayed green. This is the guard that would have caught it.
+     */
+    #[Test]
+    public function studio_js_posts_to_api_form_encoded_not_json(): void
+    {
+        $js = file_get_contents($this->root() . '/assets/js/tigerimage.studio.js');
+        $this->assertNotFalse($js);
+        $this->assertStringContainsString('/api', $js, 'the studio calls /api');
+        $this->assertStringContainsString('URLSearchParams', $js, 'the studio must post form-encoded fields to /api');
+        $this->assertStringNotContainsString("'application/json'", $js,
+            "the studio must NOT send a JSON body to /api — /api reads POST form fields, not php://input");
+        $this->assertStringNotContainsString('JSON.stringify', $js,
+            'a JSON.stringify body to /api arrives with empty params — post URLSearchParams instead');
+    }
 }

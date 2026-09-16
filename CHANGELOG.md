@@ -4,6 +4,25 @@ All notable changes to TigerImage are recorded here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versioning is SemVer with a `-beta` stability suffix
 while pre-1.0.
 
+## [1.0.8] — 2026-09-16
+
+### Fixed
+
+- **The studio was dead in a browser — every `/api` call failed with "Something went wrong."** The
+  studio JS posted to `/api` as a JSON body with a nested `params` object, but Tiger's `/api` reads
+  its routing fields + payload from POST form fields (WEBSERVICES.md §2/§6) — PHP never populates
+  `$_POST` from a raw JSON body — so `module`/`service`/`method` arrived empty and every call
+  (the on-load `listImages`, `generate`, `get`, …) failed generically. Now posts form-encoded, flat,
+  like every other Tiger screen. A `ConventionsTest` guards the request shape so it can't regress.
+  (The unit suite stayed green throughout because it calls the service directly — render it, or it
+  isn't tested.)
+- **The studio rendered in the public site theme, not the admin shell.** `Tigerimage_StudioController`
+  extended the plain action base; it now extends `Tiger_Controller_Admin_Action` (ADMIN.md), so the
+  Images screen renders in the admin layout with the sidebar, like every other admin tool.
+- **A specific failure reason is no longer swallowed.** When the service hands back a `detail` (a
+  provider refusal, a store error), the studio appends it to the banner instead of showing only a
+  generic line — the module's stated promise is to surface the reason, not bury it.
+
 ## [1.0.7] — 2026-09-16
 
 ### Changed

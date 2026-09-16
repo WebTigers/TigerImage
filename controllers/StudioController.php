@@ -14,8 +14,16 @@
  *
  * Route: /tigerimage/studio  ·  /tigerimage/studio/raw/id/<id>
  */
-class Tigerimage_StudioController extends Tiger_Controller_Action
+class Tigerimage_StudioController extends Tiger_Controller_Admin_Action
 {
+    /** Admin shell (layout) comes from the base; keep the explicit init cascade (ADMIN.md). The studio
+     *  is an admin tool reached from the sidebar (Images), so it must render in the admin layout — not
+     *  the public site theme. rawAction() disables the layout itself, so image streaming is unaffected. */
+    public function init()
+    {
+        parent::init();
+    }
+
     /** The grid. Data is fetched by the page's JS from /api, so this action only sets up the shell. */
     public function indexAction()
     {

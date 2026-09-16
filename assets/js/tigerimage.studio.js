@@ -112,16 +112,32 @@
     /* ---- /api ---------------------------------------------------------------------------- */
 
     function call(service, method, params) {
+        // Tiger's /api reads its routing fields + payload from POST form fields (WEBSERVICES.md §2/§6),
+        // NOT a JSON body — PHP never populates $_POST from a raw JSON body, so a JSON request arrives
+        // with no module/service/method and fails generically. Post form-encoded, FLAT (the service
+        // reads $params['prompt'], not $params['params']['prompt']), exactly like every other screen.
+        var body = new URLSearchParams();
+        body.set('module', 'tigerimage');
+        body.set('service', service);
+        body.set('method', method);
+        var p = params || {};
+        Object.keys(p).forEach(function (k) {
+            if (p[k] !== null && p[k] !== undefined) { body.set(k, p[k]); }
+        });
         return fetch(API, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-            body: JSON.stringify({ module: 'tigerimage', service: service, method: method, params: params || {} })
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            body: body
         }).then(function (r) { return r.json(); });
     }
 
-    /** Show the message the service gave us. A named reason is more useful than "something failed". */
+    /** Show the message the service gave us. A named reason is more useful than "something failed" —
+     *  and when the service hands back a specific `detail` (a provider's refusal, a store error), append
+     *  it: the module's whole promise is to surface the reason, not bury it under a generic line. */
     function say(res, fallback) {
         var msg = (res && res.messages && res.messages.length) ? res.messages[0].message : fallback;
+        var detail = res && res.data && res.data.detail;
+        if (detail && String(detail).trim() && res.result !== 1) { msg = (msg || '') + ' — ' + detail; }
         var ok  = res && res.result === 1;
         feedback.innerHTML =
             '<div class="alert alert-' + (ok ? 'success' : 'danger') + ' alert-dismissible fade show" role="alert">' +
