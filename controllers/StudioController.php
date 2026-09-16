@@ -22,6 +22,13 @@ class Tigerimage_StudioController extends Tiger_Controller_Action
         $cap = Tigerimage_Model_Provider::capability();
         $this->view->capability = $cap;
 
+        // A diagnostic when the module is installed but cannot draw — so an operator reading the system
+        // log learns the reason, not just a silent "Active" (TIGER-147). Operator-triggered (a Studio
+        // visit), so it never spams; fail-soft on an older core with no logger.
+        if (empty($cap['available']) && class_exists('Tiger_Log')) {
+            Tiger_Log::warn('tigerimage.unavailable', ['reason' => $cap['reason'] ?? 'unknown', 'detail' => $cap['detail'] ?? '']);
+        }
+
         // The budget gauge (TIGER-105), rendered server-side so it is right on first paint rather
         // than appearing a moment later. A page view is always a session login — it has no
         // credential — so the org ceiling is the only one that can bind here.

@@ -12,6 +12,7 @@
  * sprintf() on the server both address them by number.
  */
 return [
+    'tigerimage.nav.label'                  => 'छवियाँ',
     'tigerimage.studio.title' => 'छवि स्टूडियो',
     'tigerimage.studio.subtitle' => 'कोई छवि बताइए, जो आए उनकी तुलना कीजिए, और जो पसंद हो उसे रख लीजिए।',
     'tigerimage.studio.unavailable' => 'इस साइट पर छवि निर्माण सेट अप नहीं है',

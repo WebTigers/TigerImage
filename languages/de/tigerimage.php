@@ -12,6 +12,7 @@
  * sprintf() on the server both address them by number.
  */
 return [
+    'tigerimage.nav.label'                  => 'Bilder',
     'tigerimage.studio.title' => 'Bildstudio',
     'tigerimage.studio.subtitle' => 'Beschreiben Sie ein Bild, vergleichen Sie die Ergebnisse und behalten Sie das, das Sie wollen.',
     'tigerimage.studio.unavailable' => 'Die Bilderzeugung ist auf dieser Website nicht eingerichtet',

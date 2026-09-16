@@ -4,6 +4,20 @@ All notable changes to TigerImage are recorded here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versioning is SemVer with a `-beta` stability suffix
 while pre-1.0.
 
+## [1.0.6] — 2026-09-16
+
+### Added
+
+- **A health state instead of a silent "Active" (TIGER-147).** The module now registers an admin nav
+  item (it had none — the Studio was reachable only by URL), and that item carries a HEALTH BADGE: an
+  attention pill lights up exactly when `Tigerimage_Model_Provider::capability()` reports the module
+  cannot draw — no image provider, no key, or the spend cap reached — and clears when it can. The
+  Studio it links to already states the reason and the fix. The badge is config-only and fail-soft
+  (it renders on every admin page). Opening the Studio while unavailable also writes a
+  `tigerimage.unavailable` diagnostic (reason + detail) to the system log, so an operator learns why
+  rather than probing. Delivers the module's own documented promise: report unavailable, with the
+  reason, up front.
+
 ## [1.0.5] — 2026-09-16
 
 ### Fixed

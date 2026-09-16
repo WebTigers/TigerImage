@@ -60,4 +60,39 @@ class Tigerimage_Bootstrap extends Zend_Application_Module_Bootstrap
             }
         }
     }
+
+    /**
+     * Put TigerImage in the admin nav — with a HEALTH BADGE.
+     *
+     * Two things the module lacked (TIGER-147): it registered no nav item at all (the Studio was
+     * reachable only by URL, so an operator could not find it), and nothing surfaced that it could not
+     * actually draw — it just read "Active". The badge is that health signal: it lights up (an
+     * attention pill) exactly when Tigerimage_Model_Provider::capability() reports unavailable — no
+     * image provider, no key, or the spend cap reached — and clears when it can draw again. Clicking
+     * through lands on the Studio, which states the reason and the fix. Cheap + fail-soft: the badge
+     * runs on every admin render, so it only reads config (never the provider), and a throw shows no
+     * badge rather than breaking the menu.
+     */
+    protected function _initAdminNav()
+    {
+        if (!class_exists('Tiger_Admin_Nav')) { return; }
+
+        Tiger_Admin_Nav::register([
+            'key'      => 'tigerimage',
+            'label'    => 'tigerimage.nav.label',
+            'icon'     => 'fa-image',
+            'href'     => '/tigerimage/studio',
+            'resource' => 'Tigerimage_StudioController',
+            'order'    => 42,
+            'badge'    => static function () {
+                if (!class_exists('Tigerimage_Model_Provider')) { return 0; }
+                try {
+                    $cap = Tigerimage_Model_Provider::capability();
+                    return empty($cap['available']) ? 1 : 0;   // 1 = needs attention (unavailable)
+                } catch (Throwable $e) {
+                    return 0;
+                }
+            },
+        ]);
+    }
 }

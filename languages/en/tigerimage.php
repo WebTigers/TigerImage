@@ -10,6 +10,7 @@
  * one string was ever translated and the studio rendered its own key names on screen.
  */
 return [
+    'tigerimage.nav.label'                  => 'Images',
     'tigerimage.studio.title'               => 'Image studio',
     'tigerimage.studio.subtitle'            => 'Describe a picture, compare what comes back, keep the one you want.',
     'tigerimage.studio.unavailable'         => 'Image generation is not set up on this site',
