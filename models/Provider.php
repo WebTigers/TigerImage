@@ -119,7 +119,24 @@ class Tigerimage_Model_Provider
             'model'     => $resolved['model'],
             'source'    => $resolved['source'],
             'providers' => $providers,
+            // The parameters THIS provider actually honors (OpenAI ≠ Gemini) — so a screen or an agent
+            // asks "what can I pass right now?" and gets the truthful, dynamic answer a static schema
+            // can't give a multi-provider tool. The studio renders exactly these fields.
+            'params'    => self::_imageParams($resolved['provider']),
         ];
+    }
+
+    /**
+     * The optional generation params a provider HONORS — asked of its registered adapter, so the truth
+     * lives in one place (the adapter that actually builds the request), not a static list that drifts.
+     *
+     * @param  string $provider
+     * @return array<int,array>
+     */
+    protected static function _imageParams($provider)
+    {
+        $adapter = Tiger_Agent_Provider_Factory::imageAdapter($provider);
+        return ($adapter !== null && method_exists($adapter, 'imageParams')) ? $adapter->imageParams() : [];
     }
 
     /**

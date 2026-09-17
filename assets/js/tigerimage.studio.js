@@ -201,12 +201,14 @@
         btn.disabled = true;                     // generation is slow AND costs money — no double-fire
         btn.textContent = '…';
 
-        call('image', 'generate', {
-            prompt:   document.getElementById('ti-prompt').value,
-            negative: document.getElementById('ti-negative').value,
-            size:     document.getElementById('ti-size').value,
-            n:        document.getElementById('ti-n').value
-        }).then(function (res) {
+        // The optional fields are provider-driven (capability.params), so gather whatever the form
+        // actually rendered — a field the provider doesn't support isn't here to read.
+        var payload = {};
+        form.querySelectorAll('[name]').forEach(function (el) {
+            if (el.name && el.value !== '') { payload[el.name] = el.value; }
+        });
+
+        call('image', 'generate', payload).then(function (res) {
             say(res, t('generationFailed'));
             paintFromResponse(res);      // the whole point: watch the budget drain as you spend it
             return res.result === 1 ? load() : null;

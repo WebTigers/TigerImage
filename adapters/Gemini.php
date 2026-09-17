@@ -55,6 +55,25 @@ class Tigerimage_Adapter_Gemini extends Tiger_Agent_Provider_Gemini
      *
      * @inheritDoc
      */
+    /**
+     * The optional generation params Imagen HONORS — which DIFFER from OpenAI's: Imagen takes a real
+     * negativePrompt and a seed (OpenAI's image API takes neither), and no quality/background/output
+     * knobs. The studio + capability render exactly this set, so each provider shows only its truth.
+     *
+     * @return array<int,array> ordered param descriptors {name, type, label, options?, default?, min?, max?}
+     */
+    public function imageParams()
+    {
+        return [
+            ['name' => 'negative', 'type' => 'text', 'label' => 'tigerimage.field.negative'],
+            ['name' => 'size', 'type' => 'select', 'label' => 'tigerimage.field.size', 'default' => '1024x1024',
+             'options' => ['1024x1024' => 'tigerimage.size.square', '1536x1024' => 'tigerimage.size.landscape', '1024x1536' => 'tigerimage.size.portrait']],
+            ['name' => 'n', 'type' => 'select', 'label' => 'tigerimage.field.count', 'default' => '1',
+             'options' => ['1' => '1', '2' => '2', '4' => '4']],
+            ['name' => 'seed', 'type' => 'number', 'label' => 'tigerimage.field.seed'],
+        ];
+    }
+
     public function generateImage($prompt, array $options, $model, $apiKey)
     {
         $prompt = trim((string) $prompt);

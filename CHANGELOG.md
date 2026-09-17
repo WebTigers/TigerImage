@@ -4,6 +4,27 @@ All notable changes to TigerImage are recorded here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versioning is SemVer with a `-beta` stability suffix
 while pre-1.0.
 
+## [1.3.0] — 2026-09-17
+
+### Added
+
+- **Per-provider parameter surface — the studio + capability show only what the current provider
+  actually honors.** Each image adapter now declares `imageParams()` (the optional params it honors,
+  with types/enums), `capability` returns the set for the configured provider, and the studio renders
+  its fields from that set. So OpenAI no longer shows a **negative-prompt or seed** field (its image
+  API accepts neither — they were silently dropped), while Gemini/Imagen, which *does* honor both,
+  still shows them. An agent can ask "what can I pass right now?" and get a truthful, dynamic answer a
+  static schema can't give a multi-provider tool.
+- **OpenAI `gpt-image` knobs wired through:** `quality` (the cost lever), `background` (transparent →
+  logos/icons), `output_format` (png/jpeg/webp) and `output_compression`. The generate schema
+  advertises them as enums; the studio renders them for OpenAI.
+
+### Fixed
+
+- **The stored image mime now matches the requested format** — it was hardcoded `image/png`, so a
+  jpeg/webp response was mislabelled. Combined with `output_format`/`output_compression`, this is the
+  fix for a 1.7 MB PNG landing in the Media Library.
+
 ## [1.2.0] — 2026-09-17
 
 ### Added

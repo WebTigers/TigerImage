@@ -114,6 +114,12 @@ class Tigerimage_Service_Image extends Tiger_Service_Service
             'n'               => max(1, min(self::MAX_N, (int) ($params['n'] ?? 1))),
         ];
         if (isset($params['seed']) && $params['seed'] !== '') { $options['seed'] = (int) $params['seed']; }
+        // Provider-specific knobs (OpenAI: quality/background/output_format/output_compression). Passed
+        // through verbatim; each adapter reads only what it honours and ignores the rest, so a param
+        // meant for another provider is a no-op, never an error.
+        foreach (['quality', 'background', 'output_format', 'output_compression'] as $k) {
+            if (isset($params[$k]) && $params[$k] !== '') { $options[$k] = $params[$k]; }
+        }
 
         // A reference image is named by ID, never uploaded through this call: the image is already in
         // our store, and making an agent round-trip base64 through the API would be slower, larger and

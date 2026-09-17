@@ -57,31 +57,40 @@ $binding = !empty($spend['binding']) ? (array) $spend['binding'] : null;
     </div>
 <?php else: ?>
 
+<?php
+// The optional fields are DATA-DRIVEN from the current provider's honored params (capability.params),
+// so a knob the provider doesn't support (a negative prompt on OpenAI, quality on Gemini) is never
+// rendered — and adding one is a declaration on the adapter, not markup here. A label/option that
+// looks like an i18n key (has a dot) is translated; otherwise it's a literal (e.g. "PNG", "2").
+$tOrLit = function ($s) { return strpos((string) $s, '.') !== false ? $this->t($s) : (string) $s; };
+$params = (array) ($cap['params'] ?? []);
+?>
 <form id="ti-generate" class="card mb-4" autocomplete="off">
     <div class="card-body">
         <label class="form-label" for="ti-prompt"><?= $this->escape($this->t('tigerimage.field.prompt')) ?></label>
         <textarea class="form-control" id="ti-prompt" name="prompt" rows="2"
                   placeholder="<?= $this->escape($this->t('tigerimage.field.prompt_hint')) ?>" required></textarea>
 
-        <div class="row g-2 mt-2">
-            <div class="col-sm-4">
-                <label class="form-label" for="ti-negative"><?= $this->escape($this->t('tigerimage.field.negative')) ?></label>
-                <input class="form-control" id="ti-negative" name="negative" type="text">
-            </div>
-            <div class="col-sm-3">
-                <label class="form-label" for="ti-size"><?= $this->escape($this->t('tigerimage.field.size')) ?></label>
-                <select class="form-select" id="ti-size" name="size">
-                    <option value="1024x1024"><?= $this->escape($this->t('tigerimage.size.square')) ?></option>
-                    <option value="1536x1024"><?= $this->escape($this->t('tigerimage.size.landscape')) ?></option>
-                    <option value="1024x1536"><?= $this->escape($this->t('tigerimage.size.portrait')) ?></option>
-                </select>
-            </div>
-            <div class="col-sm-2">
-                <label class="form-label" for="ti-n"><?= $this->escape($this->t('tigerimage.field.count')) ?></label>
-                <select class="form-select" id="ti-n" name="n">
-                    <option>1</option><option>2</option><option selected>4</option>
-                </select>
-            </div>
+        <div class="row g-2 mt-2 align-items-end">
+            <?php foreach ($params as $p): $name = $this->escape($p['name']); ?>
+                <div class="col-sm-3">
+                    <label class="form-label" for="ti-<?= $name ?>"><?= $this->escape($tOrLit($p['label'] ?? $p['name'])) ?></label>
+                    <?php if (($p['type'] ?? 'text') === 'select'): ?>
+                        <select class="form-select" id="ti-<?= $name ?>" name="<?= $name ?>">
+                            <?php foreach ((array) ($p['options'] ?? []) as $val => $optLabel): ?>
+                                <option value="<?= $this->escape($val) ?>" <?= (isset($p['default']) && (string) $p['default'] === (string) $val) ? 'selected' : '' ?>><?= $this->escape($tOrLit($optLabel)) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    <?php elseif (($p['type'] ?? '') === 'number'): ?>
+                        <input class="form-control" id="ti-<?= $name ?>" name="<?= $name ?>" type="number"
+                               <?= isset($p['min']) ? 'min="' . (int) $p['min'] . '"' : '' ?> <?= isset($p['max']) ? 'max="' . (int) $p['max'] . '"' : '' ?>
+                               <?= isset($p['default']) ? 'value="' . $this->escape($p['default']) . '"' : '' ?>>
+                    <?php else: ?>
+                        <input class="form-control" id="ti-<?= $name ?>" name="<?= $name ?>" type="text"
+                               <?= isset($p['default']) ? 'value="' . $this->escape($p['default']) . '"' : '' ?>>
+                    <?php endif; ?>
+                </div>
+            <?php endforeach; ?>
             <div class="col-sm-3 d-flex align-items-end">
                 <button class="btn btn-primary w-100" type="submit" id="ti-go">
                     <?= $this->escape($this->t('tigerimage.action.generate')) ?>

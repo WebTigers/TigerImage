@@ -41,6 +41,25 @@ class Tigerimage_Form_Generate extends Tiger_Form
                 'label'      => $this->_t('tigerimage.field.count'),  // "How many"
                 'validators' => [['InArray', false, [['1', '2', '4']]]],
             ]],
+            // OpenAI (gpt-image) knobs. Honored per provider — the capability payload + the studio show
+            // only the current provider's set; this static schema lists the superset for discovery.
+            ['text', 'quality', [
+                'required'   => false,
+                'validators' => [['InArray', false, [['auto', 'low', 'medium', 'high']]]],
+            ]],
+            ['text', 'background', [
+                'required'   => false,
+                'validators' => [['InArray', false, [['auto', 'opaque', 'transparent']]]],
+            ]],
+            ['text', 'output_format', [
+                'required'   => false,
+                'validators' => [['InArray', false, [['png', 'jpeg', 'webp']]]],
+            ]],
+            ['text', 'output_compression', [
+                'required'   => false,
+                'filters'    => ['StringTrim'],
+                'validators' => [['Int'], ['Between', false, [0, 100]]],
+            ]],
             ['text', 'seed', [
                 'required'   => false,
                 'filters'    => ['StringTrim'],

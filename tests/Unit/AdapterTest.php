@@ -107,6 +107,51 @@ final class AdapterTest extends TestCase
         $a->generateImage('x', [], 'gpt-image-1', 'k');
     }
 
+    #[Test]
+    public function openai_sends_the_gpt_image_knobs_and_matches_the_mime(): void
+    {
+        $a = new FakeOpenAi();
+        FakeOpenAi::$response = ['data' => [['b64_json' => 'AAAA']]];
+        $out = $a->generateImage('x', [
+            'quality' => 'high', 'background' => 'transparent',
+            'output_format' => 'webp', 'output_compression' => '80',
+        ], 'gpt-image-1', 'k');
+
+        $this->assertSame('high', FakeOpenAi::$sent['quality']);
+        $this->assertSame('transparent', FakeOpenAi::$sent['background']);
+        $this->assertSame('webp', FakeOpenAi::$sent['output_format']);
+        $this->assertSame(80, FakeOpenAi::$sent['output_compression']);
+        $this->assertSame('image/webp', $out['images'][0]['mime'], 'stored mime matches the requested format, not a hardcoded png');
+    }
+
+    #[Test]
+    public function openai_omits_auto_and_unset_knobs_and_defaults_to_png(): void
+    {
+        $a = new FakeOpenAi();
+        FakeOpenAi::$response = ['data' => [['b64_json' => 'AAAA']]];
+        $out = $a->generateImage('x', ['quality' => 'auto'], 'gpt-image-1', 'k');
+
+        $this->assertArrayNotHasKey('quality', FakeOpenAi::$sent, 'auto = the model default, so nothing is sent');
+        $this->assertArrayNotHasKey('output_format', FakeOpenAi::$sent);
+        $this->assertArrayNotHasKey('output_compression', FakeOpenAi::$sent, 'no compression without a jpeg/webp format');
+        $this->assertSame('image/png', $out['images'][0]['mime']);
+    }
+
+    #[Test]
+    public function imageParams_are_per_provider_openai_has_no_negative_or_seed(): void
+    {
+        $names = array_column((new Tigerimage_Adapter_OpenAi())->imageParams(), 'name');
+        $this->assertContains('quality', $names, 'OpenAI honors quality (the cost lever)');
+        $this->assertContains('output_format', $names);
+        $this->assertNotContains('negative', $names, 'the OpenAI image API has no negative prompt — do not advertise it');
+        $this->assertNotContains('seed', $names, 'nor a seed');
+
+        $gemini = array_column((new Tigerimage_Adapter_Gemini())->imageParams(), 'name');
+        $this->assertContains('negative', $gemini, 'Imagen DOES honor a negative prompt');
+        $this->assertContains('seed', $gemini);
+        $this->assertNotContains('quality', $gemini, 'Imagen has no quality knob');
+    }
+
     /* ---- Gemini ----------------------------------------------------------------------------- */
 
     #[Test]

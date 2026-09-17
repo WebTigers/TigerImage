@@ -60,6 +60,31 @@ class Tigerimage_Adapter_OpenAi extends Tiger_Agent_Provider_OpenAi
      *
      * @inheritDoc
      */
+    /**
+     * The optional generation params gpt-image-* HONORS (beyond the prompt). The studio + the
+     * capability payload render only these, so a field that does NOTHING on this provider — a negative
+     * prompt or a seed, neither of which the OpenAI image API accepts — is never shown to a user or
+     * handed to an agent. That is the whole point: don't advertise a knob the adapter drops.
+     *
+     * @return array<int,array> ordered param descriptors {name, type, label, options?, default?, min?, max?}
+     */
+    public function imageParams()
+    {
+        return [
+            ['name' => 'size', 'type' => 'select', 'label' => 'tigerimage.field.size', 'default' => '1024x1024',
+             'options' => ['1024x1024' => 'tigerimage.size.square', '1536x1024' => 'tigerimage.size.landscape', '1024x1536' => 'tigerimage.size.portrait']],
+            ['name' => 'n', 'type' => 'select', 'label' => 'tigerimage.field.count', 'default' => '4',
+             'options' => ['1' => '1', '2' => '2', '4' => '4']],
+            ['name' => 'quality', 'type' => 'select', 'label' => 'tigerimage.field.quality', 'default' => 'auto',
+             'options' => ['auto' => 'tigerimage.opt.auto', 'low' => 'tigerimage.opt.low', 'medium' => 'tigerimage.opt.medium', 'high' => 'tigerimage.opt.high']],
+            ['name' => 'background', 'type' => 'select', 'label' => 'tigerimage.field.background', 'default' => 'auto',
+             'options' => ['auto' => 'tigerimage.opt.auto', 'opaque' => 'tigerimage.opt.opaque', 'transparent' => 'tigerimage.opt.transparent']],
+            ['name' => 'output_format', 'type' => 'select', 'label' => 'tigerimage.field.output_format', 'default' => 'png',
+             'options' => ['png' => 'PNG', 'jpeg' => 'JPEG', 'webp' => 'WebP']],
+            ['name' => 'output_compression', 'type' => 'number', 'label' => 'tigerimage.field.output_compression', 'min' => 0, 'max' => 100],
+        ];
+    }
+
     public function generateImage($prompt, array $options, $model, $apiKey)
     {
         $prompt = trim((string) $prompt);
@@ -68,6 +93,7 @@ class Tigerimage_Adapter_OpenAi extends Tiger_Agent_Provider_OpenAi
         $size = $this->_snapSize($options['size'] ?? '');
         $n    = max(1, min(10, (int) ($options['n'] ?? 1)));
 
+        $isGptImage = strpos(strtolower((string) $model), 'gpt-image') !== false;
         $payload = [
             'model'           => $model,
             'prompt'          => $prompt,
@@ -76,22 +102,38 @@ class Tigerimage_Adapter_OpenAi extends Tiger_Agent_Provider_OpenAi
             'response_format' => 'b64_json',
         ];
 
-        // dall-e-3 rejects both `n > 1` and `response_format` is still honoured; gpt-image-* ignores
-        // response_format and always returns b64. Send what each accepts rather than one payload that
-        // half-works on both.
+        // The image FORMAT the bytes come back as — png unless gpt-image is told otherwise. Tracked so
+        // the stored mime matches (a hardcoded image/png on a jpeg/webp response is a lie).
+        $format = 'png';
+
+        // dall-e-3 rejects `n > 1`; gpt-image-* ignores `response_format` (always b64) but accepts the
+        // quality/background/output params dall-e does not. Send each only what it honours.
         if (strpos(strtolower((string) $model), 'dall-e-3') !== false) {
             $payload['n'] = 1;
         }
-        if (strpos(strtolower((string) $model), 'gpt-image') !== false) {
+        if ($isGptImage) {
             unset($payload['response_format']);
+            // quality (the cost lever) + background (transparent = logos/icons). 'auto' = the model's
+            // default, so we send nothing and let it decide.
+            foreach (['quality', 'background'] as $k) {
+                $v = strtolower(trim((string) ($options[$k] ?? '')));
+                if ($v !== '' && $v !== 'auto') { $payload[$k] = $v; }
+            }
+            // output_format + compression — the fix for a 1.7 MB PNG landing in the Media Library.
+            $of = strtolower(trim((string) ($options['output_format'] ?? '')));
+            if (in_array($of, ['png', 'jpeg', 'webp'], true)) { $payload['output_format'] = $of; $format = $of; }
+            if (in_array($format, ['jpeg', 'webp'], true) && ($options['output_compression'] ?? '') !== '') {
+                $payload['output_compression'] = max(0, min(100, (int) $options['output_compression']));
+            }
         }
 
         $body = $this->_post($this->_base() . '/images/generations', $payload, $this->_headers($apiKey));
 
+        $mime = 'image/' . $format;
         $images = [];
         foreach (($body['data'] ?? []) as $item) {
             if (empty($item['b64_json'])) { continue; }
-            $images[] = ['mime' => 'image/png', 'data' => (string) $item['b64_json']];
+            $images[] = ['mime' => $mime, 'data' => (string) $item['b64_json']];
         }
         if (!$images) {
             throw new RuntimeException('The provider returned no image data.');
@@ -106,6 +148,9 @@ class Tigerimage_Adapter_OpenAi extends Tiger_Agent_Provider_OpenAi
                 'model'           => $model,
                 'size'            => $size,
                 'n'               => count($images),
+                'quality'         => $payload['quality'] ?? null,
+                'background'      => $payload['background'] ?? null,
+                'output_format'   => $payload['output_format'] ?? null,
                 'revised_prompt'  => $body['data'][0]['revised_prompt'] ?? null,
             ], static fn($v) => $v !== null),
         ];
