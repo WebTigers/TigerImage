@@ -167,13 +167,18 @@ class Tigerimage_Model_Spend
         // With the feature off there is no active cap (even if a monthly_cap value sits in config), so
         // cap/remaining/binding are all null — but spent_this_month is still the real tracked total.
         $cap    = self::enabled() ? self::cap() : null;
-        $spent  = $limits['org']['spent'] ?? static::spentThisMonth($orgId);
+        // Money is rounded to 4dp before it leaves — a float SUM (0.04 + 0.02) otherwise trails noise
+        // (0.060000000000000005) that reads absurdly and drifts a comparison. (The platform also forces
+        // serialize_precision=-1 so the encoder itself is clean; this keeps the VALUES honest too.)
+        $spent  = round((float) ($limits['org']['spent'] ?? static::spentThisMonth($orgId)), 4);
         $out    = [
             'enabled'          => self::enabled(),
             'spent_this_month' => $spent,
             'cap'              => $cap,
-            'remaining'        => $cap === null ? null : max(0.0, round($cap - $spent, 5)),
-            'enforce'          => self::enforcement(),
+            'remaining'        => $cap === null ? null : max(0.0, round($cap - $spent, 4)),
+            // Enforcement only means something when the feature is on; off, it is null (not a dangling
+            // "hard" beside enabled:false + cap:null, which reads as three contradictory settings).
+            'enforce'          => self::enabled() ? self::enforcement() : null,
             'currency'         => 'USD',
             'basis'            => 'estimated',   // never claim these are billed figures
         ];
@@ -183,9 +188,9 @@ class Tigerimage_Model_Spend
         if (isset($limits['token'])) {
             $t = $limits['token'];
             $out['token'] = [
-                'spent_this_month' => $t['spent'],
-                'cap'              => $t['cap'],
-                'remaining'        => max(0.0, round($t['cap'] - $t['spent'], 5)),
+                'spent_this_month' => round((float) $t['spent'], 4),
+                'cap'              => round((float) $t['cap'], 4),
+                'remaining'        => max(0.0, round($t['cap'] - $t['spent'], 4)),
             ];
         }
 

@@ -51,6 +51,8 @@ spl_autoload_register(static function ($class) use ($moduleRoot) {
         $rel = 'adapters/' . str_replace('_', '/', $m[1]) . '.php';
     } elseif (preg_match('/^Tigerimage_Model_(.+)$/', $class, $m)) {
         $rel = 'models/' . str_replace('_', '/', $m[1]) . '.php';
+    } elseif (preg_match('/^Tigerimage_Form_(.+)$/', $class, $m)) {
+        $rel = 'forms/' . str_replace('_', '/', $m[1]) . '.php';
     } elseif (preg_match('/^Tigerimage_Plugin_(.+)$/', $class, $m)) {
         $rel = 'plugins/' . str_replace('_', '/', $m[1]) . '.php';
     } elseif (preg_match('/^Tigerimage_(.+)Controller$/', $class, $m)) {

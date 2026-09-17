@@ -1,46 +1,47 @@
 {
-  "schema": "tiger.module/v1",
-  "slug": "tigerimage",
-  "name": "TigerImage",
-  "version": "1.1.0",
-  "description": "Image generation for any agent. Drives the Tiger provider adapters to turn a prompt into pictures, remembers how each one was made so it can be refined, and promotes the keepers into the Media Library. Gives a text-only assistant the ability to illustrate a page it just wrote.",
-  "author": {
-    "name": "WebTigers",
-    "url": "https://webtigers.com"
-  },
-  "homepage": "https://webtigers.com/tigerimage",
-  "repository": "https://github.com/WebTigers/TigerImage",
-  "license": "BSD-3-Clause",
-  "keywords": [
-    "image",
-    "generation",
-    "diffusion",
-    "ai",
-    "media",
-    "agent",
-    "mcp"
-  ],
-  "requires": {
-    "tiger": ">=1.5.22",
-    "php": ">=8.1"
-  },
-  "type": "plugin",
-  "category": [
-    "media"
-  ],
-  "paths": {
-    "services": "services",
-    "models": "models",
-    "migrations": "migrations",
-    "configs": "configs",
-    "controllers": "controllers",
-    "views": "views",
-    "assets": "assets",
-    "languages": "languages",
-    "adapters": "adapters"
-  },
-  "pricing": {
-    "model": "free"
-  },
-  "_notes": "Free, BSD-licensed first-party module. Generated images live in storage/tigerimage — OUTSIDE the module directory, because a module update renames the module dir away and deletes the backup (Tiger_Module_Installer), which would destroy anything stored inside it. See TIGER-101 for making purge remove that tree."
+    "schema": "tiger.module/v1",
+    "slug": "tigerimage",
+    "name": "TigerImage",
+    "version": "1.2.0",
+    "description": "Image generation for any agent. Drives the Tiger provider adapters to turn a prompt into pictures, remembers how each one was made so it can be refined, and promotes the keepers into the Media Library. Gives a text-only assistant the ability to illustrate a page it just wrote.",
+    "author": {
+        "name": "WebTigers",
+        "url": "https://webtigers.com"
+    },
+    "homepage": "https://webtigers.com/tigerimage",
+    "repository": "https://github.com/WebTigers/TigerImage",
+    "license": "BSD-3-Clause",
+    "keywords": [
+        "image",
+        "generation",
+        "diffusion",
+        "ai",
+        "media",
+        "agent",
+        "mcp"
+    ],
+    "requires": {
+        "tiger": ">=1.5.22",
+        "php": ">=8.1"
+    },
+    "type": "plugin",
+    "category": [
+        "media"
+    ],
+    "paths": {
+        "services": "services",
+        "models": "models",
+        "migrations": "migrations",
+        "configs": "configs",
+        "controllers": "controllers",
+        "views": "views",
+        "assets": "assets",
+        "languages": "languages",
+        "adapters": "adapters",
+        "forms": "forms"
+    },
+    "pricing": {
+        "model": "free"
+    },
+    "_notes": "Free, BSD-licensed first-party module. Generated images live in storage/tigerimage — OUTSIDE the module directory, because a module update renames the module dir away and deletes the backup (Tiger_Module_Installer), which would destroy anything stored inside it. See TIGER-101 for making purge remove that tree."
 }

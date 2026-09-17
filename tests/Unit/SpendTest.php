@@ -129,6 +129,7 @@ final class SpendTest extends TestCase
         $s = FakeSpend::summary('org');
         $this->assertFalse($s['enabled']);
         $this->assertNull($s['cap'], 'no active cap when the feature is off');
+        $this->assertNull($s['enforce'], 'enforce reads null when off — not a dangling "hard" beside cap:null');
         $this->assertNull($s['binding'], 'null binding = the gauge draws nothing');
         $this->assertSame(50.0, $s['spent_this_month'], 'tracking continues regardless');
     }

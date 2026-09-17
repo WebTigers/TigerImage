@@ -4,6 +4,25 @@ All notable changes to TigerImage are recorded here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versioning is SemVer with a `-beta` stability suffix
 while pre-1.0.
 
+## [1.2.0] — 2026-09-17
+
+### Added
+
+- **`tigerimage__image__generate` now ships a typed argument schema** (`Tigerimage_Form_Generate` +
+  `@apiRequest`). The tool advertised `additionalProperties: true` — so an agent had to guess the field
+  names (the studio's "Avoid"/"Shape" labels don't match the API's `negative`/`size`) or read the page
+  JS, and each wrong guess is a *billed* call. The schema now declares the real names — `prompt`
+  (required), `negative`, `size`, `n` — with `size` and `n` as **enums** (needs tiger-core's
+  InArray→enum mapper, shipping alongside).
+
+### Fixed
+
+- **Money no longer trails float noise.** `spent_this_month` etc. are rounded to 4dp before they leave
+  the API (a float sum otherwise read as `0.060000000000000005`). The platform also forces
+  `serialize_precision=-1` (tiger-core), but the values are kept honest here too.
+- **`enforce` reads `null` when the budget feature is off** — not a dangling `"hard"` beside
+  `enabled:false` + `cap:null`, which read as three contradictory settings.
+
 ## [1.1.0] — 2026-09-17
 
 ### Changed

@@ -81,6 +81,7 @@ class Tigerimage_Service_Image extends Tiger_Service_Service
      *
      * @param  array $params prompt (required), negative?, size?, n?, seed?, parent_id?, reference_id?
      * @return void
+     * @apiRequest Tigerimage_Form_Generate
      */
     public function generate(array $params): void
     {
