@@ -4,6 +4,16 @@ All notable changes to TigerImage are recorded here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versioning is SemVer with a `-beta` stability suffix
 while pre-1.0.
 
+## [1.0.9] — 2026-09-17
+
+### Fixed
+
+- **`configs/routes.ini` was missing the `[staging]`/`[testing]`/`[development]` env sections**, so on a
+  non-production install Zend_Config_Ini threw on load and the module's routes (and ACL) failed —
+  the studio route 404'd in dev/staging/testing. `acl.ini` got these in 1.0.5; `routes.ini` didn't
+  until now. A `ConventionsTest` now asserts every `configs/*.ini` declares all four env sections so
+  it can't recur.
+
 ## [1.0.8] — 2026-09-16
 
 ### Fixed

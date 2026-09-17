@@ -432,6 +432,33 @@ final class ConventionsTest extends TestCase
     }
 
     /**
+     * Every configs/*.ini must declare all four env sections.
+     *
+     * Tiger loads each ini with Zend_Config_Ini($file, APPLICATION_ENV); a missing section for the
+     * active env THROWS, so the whole file (routes, ACL) fails to load — silently in production
+     * (which has [production]) and loudly in dev/staging/testing. routes.ini shipped with only
+     * [production] and broke every non-prod install of the module (the studio route 404'd) until this.
+     * acl.ini learned this the same way in 1.0.5; this guards both and any future ini.
+     */
+    #[Test]
+    public function every_config_ini_declares_all_four_env_sections(): void
+    {
+        $inis = glob($this->root() . '/configs/*.ini') ?: [];
+        $this->assertNotEmpty($inis, 'no config inis found — the glob is wrong, not the rule');
+        foreach ($inis as $f) {
+            $src = file_get_contents($f);
+            $name = basename($f);
+            $this->assertMatchesRegularExpression('/^\[production\]/m', $src, "$name must declare [production]");
+            foreach (['staging', 'testing', 'development'] as $env) {
+                $this->assertMatchesRegularExpression(
+                    '/^\[' . $env . '\s*:\s*production\]/m', $src,
+                    "$name must declare [$env : production] — a missing env section throws on load in that env"
+                );
+            }
+        }
+    }
+
+    /**
      * The studio must talk to /api the way /api actually READS a request — form-encoded fields, flat.
      *
      * Tiger's /api gateway resolves module/service/method and the payload from POST form fields
