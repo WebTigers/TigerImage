@@ -27,6 +27,7 @@ final class GenerateGuardTest extends TestCase
 
     private function boot(array $spend): GuardableImageService
     {
+        $spend = $spend + ['enabled' => '1'];   // the budget feature is OFF by default; these tests exercise the cap, so turn it on
         Zend_Registry::set('Zend_Config', new Zend_Config([
             'tigerimage' => ['provider' => 'openai', 'model' => 'gpt-image-1', 'spend' => $spend],
         ]));

@@ -19,7 +19,17 @@
  */
 class Tigerimage_Model_Spend
 {
-    /** USD per calendar month, per org. Empty/absent = uncapped. */
+    /**
+     * The budget FEATURE master switch (the gauge + the cap enforcement). OFF by default.
+     *
+     * An estimated-dollar gauge is noise if it can't be accurate — providers don't expose an account
+     * balance to a BYO API key, so these figures are Tiger's own estimate, never the real bill. So the
+     * whole budget UI + enforcement is opt-in: off, there is no gauge and no ceiling (spend freely).
+     * Spending is STILL TRACKED either way (the per-image cost is recorded at generate time, not here),
+     * so turning the feature on later has a real running total from day one.
+     */
+    const CFG_ENABLED = 'tigerimage.spend.enabled';
+    /** USD per calendar month, per org. Empty/absent = uncapped. Only in force when CFG_ENABLED is on. */
     const CFG_CAP     = 'tigerimage.spend.monthly_cap';
     /** `hard` refuses; `soft` allows and reports. Hard by default. */
     const CFG_ENFORCE = 'tigerimage.spend.enforce';
@@ -124,6 +134,12 @@ class Tigerimage_Model_Spend
         return (float) (new Tigerimage_Model_Image())->spentSince((string) $orgId, $since);
     }
 
+    /** Is the budget feature (gauge + cap enforcement) switched on? OFF by default — see CFG_ENABLED. */
+    public static function enabled()
+    {
+        return trim((string) self::_config(self::CFG_ENABLED)) === '1';
+    }
+
     /** The configured monthly cap, or null when uncapped. */
     public static function cap()
     {
@@ -148,9 +164,12 @@ class Tigerimage_Model_Spend
     public static function summary($orgId, $credentialId = null)
     {
         $limits = self::_ceilings($orgId, $credentialId);
-        $cap    = self::cap();
+        // With the feature off there is no active cap (even if a monthly_cap value sits in config), so
+        // cap/remaining/binding are all null — but spent_this_month is still the real tracked total.
+        $cap    = self::enabled() ? self::cap() : null;
         $spent  = $limits['org']['spent'] ?? static::spentThisMonth($orgId);
         $out    = [
+            'enabled'          => self::enabled(),
             'spent_this_month' => $spent,
             'cap'              => $cap,
             'remaining'        => $cap === null ? null : max(0.0, round($cap - $spent, 5)),
@@ -190,6 +209,10 @@ class Tigerimage_Model_Spend
      */
     protected static function _ceilings($orgId, $credentialId = null)
     {
+        // Feature off = no ceilings at all, so check() allows freely and summary()'s binding is null
+        // (the gauge draws nothing). Tracking is unaffected — it lives in the image store, not here.
+        if (!self::enabled()) { return []; }
+
         $limits = [];
         if (($orgCap = self::cap()) !== null) {
             $limits['org'] = ['cap' => $orgCap, 'spent' => static::spentThisMonth($orgId)];

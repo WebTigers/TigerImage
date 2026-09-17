@@ -24,7 +24,8 @@ final class SpendTest extends TestCase
 
     private function config(array $spend): void
     {
-        Zend_Registry::set('Zend_Config', new Zend_Config(['tigerimage' => ['spend' => $spend]]));
+        $spend = $spend + ["enabled" => "1"];   // default the budget feature ON so cap tests still enforce
+        Zend_Registry::set("Zend_Config", new Zend_Config(["tigerimage" => ["spend" => $spend]]));
     }
 
     /* ---- pricing ---------------------------------------------------------------------------- */
@@ -113,11 +114,44 @@ final class SpendTest extends TestCase
         $this->assertFalse(FakeSpend::check('org', 0.51)['allowed'], 'a penny over is not');
     }
 
+    #[Test]
+    public function feature_off_ignores_a_configured_cap_but_still_tracks(): void
+    {
+        // A cap is set, but the budget feature is OFF: no enforcement, no gauge — yet the tracked
+        // total is still reported, so turning the feature on later has real history from day one.
+        $this->config(['monthly_cap' => '10', 'enforce' => 'hard', 'enabled' => '0']);
+        FakeSpend::$spent = 50.0;                          // far over the $10 cap
+
+        $r = FakeSpend::check('org', 100.0);               // a huge call
+        $this->assertTrue($r['allowed'], 'feature off = spend freely, no ceiling');
+        $this->assertSame('uncapped', $r['reason']);
+
+        $s = FakeSpend::summary('org');
+        $this->assertFalse($s['enabled']);
+        $this->assertNull($s['cap'], 'no active cap when the feature is off');
+        $this->assertNull($s['binding'], 'null binding = the gauge draws nothing');
+        $this->assertSame(50.0, $s['spent_this_month'], 'tracking continues regardless');
+    }
+
+    #[Test]
+    public function feature_on_makes_the_cap_and_gauge_live(): void
+    {
+        $this->config(['monthly_cap' => '10', 'enforce' => 'hard', 'enabled' => '1']);
+        FakeSpend::$spent = 9.98;
+        $this->assertFalse(FakeSpend::check('org', 0.16)['allowed'], 'over the cap is refused when on');
+
+        $s = FakeSpend::summary('org');
+        $this->assertTrue($s['enabled']);
+        $this->assertSame(10.0, $s['cap']);
+        $this->assertNotNull($s['binding'], 'a binding drives the gauge');
+    }
+
     /* ---- the per-token ceiling (TIGER-100 + TIGER-102) -------------------------------------- */
 
     private function spendConfig(array $spend): void
     {
-        Zend_Registry::set('Zend_Config', new Zend_Config(['tigerimage' => ['spend' => $spend]]));
+        $spend = $spend + ["enabled" => "1"];   // default the budget feature ON so cap tests still enforce
+        Zend_Registry::set("Zend_Config", new Zend_Config(["tigerimage" => ["spend" => $spend]]));
     }
 
     /**

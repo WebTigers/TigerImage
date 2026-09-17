@@ -4,6 +4,18 @@ All notable changes to TigerImage are recorded here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versioning is SemVer with a `-beta` stability suffix
 while pre-1.0.
 
+## [1.1.0] — 2026-09-17
+
+### Changed
+
+- **The budget gauge + spend cap are now an opt-in feature, OFF by default** (`tigerimage.spend.enabled`,
+  default `0`). Providers don't expose an account balance to a BYO API key, so the dollar figures are
+  Tiger's own *estimate*, never the real bill — an inaccurate gauge is noise, so it's hidden and the
+  cap doesn't enforce unless an operator deliberately turns the feature on. **Spending is still tracked
+  regardless** (the per-image cost is recorded at generate time), so enabling the feature later shows a
+  real running total from day one. When on, the gauge + ceiling behave exactly as before. The switch
+  gates *display + enforcement*, never *tracking*.
+
 ## [1.0.9] — 2026-09-17
 
 ### Fixed
