@@ -4,6 +4,22 @@ All notable changes to TigerImage are recorded here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versioning is SemVer with a `-beta` stability suffix
 while pre-1.0.
 
+## [1.3.1] — 2026-09-18
+
+### Fixed
+
+- **Alt text is the image's subject, not the generation recipe.** Promote copied the whole prompt into
+  `alt_text`, trailing style/camera directives and all ("editorial photography, shallow depth of field,
+  no people") — instructions to the model, not a description a screen-reader user needs, and a
+  derived-but-wrong alt reads as worse than an empty one because it looks filled in. `alt_text` now keeps
+  the descriptive clauses and strips the trailing directive run (a caller-supplied `alt` still wins, and
+  the full prompt still lives in `caption` for search). (Round-4 B3.)
+
+### Note
+
+- The round-4 blockers **B1** (MCP content writes rejected by CSRF) and **B2** (promoted media 404 on a
+  split-docroot cPanel host) were both **core** issues, fixed in tiger-core 1.11.2 — not in this module.
+
 ## [1.3.0] — 2026-09-17
 
 ### Added

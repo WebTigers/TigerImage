@@ -223,11 +223,59 @@ class Tigerimage_Service_Library extends Tiger_Service_Service
             'height'      => (int) $row->height,
             'filename'    => $filename,
             'title'       => $title,
-            // Searchable by what it IS. The prompt is the best description anyone will write, and
-            // alt_text is an accessibility requirement rather than a nicety.
+            // Searchable by what it IS: the full prompt is the caption (best description anyone will
+            // write). But alt_text describes the image to a screen-reader user, so it is the SUBJECT,
+            // not the generation recipe — a caller-supplied alt wins, else the prompt with its trailing
+            // style/camera directives stripped (round-4 B3: "editorial photography, shallow depth of
+            // field, no people" are instructions to the generator, not a description of the picture).
             'caption'     => (string) $row->prompt,
-            'alt_text'    => trim((string) ($opts['alt'] ?? '')) ?: (string) $row->prompt,
+            'alt_text'    => trim((string) ($opts['alt'] ?? '')) ?: $this->_altFrom($row->prompt),
         ]);
+    }
+
+    /**
+     * Derive alt text from a generation prompt: keep the descriptive clauses, drop the trailing run of
+     * style/technical directives a generator prompt tacks on ("editorial photography", "no people",
+     * "8k", "cinematic"…). A derived-but-wrong alt is worse than none, because it looks filled in.
+     *
+     * Prompts read subject-first with directives last, so we split on commas and peel matching clauses
+     * off the END only — a directive word appearing mid-description (a scene that is genuinely "about"
+     * light) is untouched. Capped to a sane alt length.
+     */
+    protected function _altFrom($prompt)
+    {
+        $p = trim(preg_replace('/\s+/', ' ', (string) $prompt));
+        if ($p === '') { return 'Generated image'; }
+
+        // Whole-clause directive markers (matched case-insensitively as a substring of a trailing clause).
+        static $directives = [
+            'photography', 'photorealistic', 'photo realistic', 'realistic', 'depth of field', 'bokeh',
+            'no people', 'highly detailed', 'high detail', 'ultra detailed', 'intricate detail', 'sharp focus',
+            'soft focus', 'cinematic', 'studio lighting', 'soft lighting', 'dramatic lighting', 'volumetric',
+            'wide angle', 'close up', 'close-up', 'macro', 'telephoto', 'aerial', 'overhead', 'top down',
+            'render', 'octane', 'unreal engine', 'concept art', 'digital art', 'illustration', 'painterly',
+            'watercolor', 'oil painting', 'trending on artstation', 'award winning', 'masterpiece', 'hdr',
+            'film grain', 'vignette', 'lens flare', 'golden ratio', 'rule of thirds', 'vibrant colors',
+            'muted colors', 'monochrome', 'hyperrealistic', 'ultra realistic', '4k', '8k', '16k', 'uhd',
+        ];
+
+        $clauses = array_map('trim', explode(',', $p));
+        while (count($clauses) > 1) {
+            $last = strtolower(end($clauses));
+            $isDirective = false;
+            foreach ($directives as $d) {
+                if (strpos($last, $d) !== false) { $isDirective = true; break; }
+            }
+            if (!$isDirective) { break; }
+            array_pop($clauses);
+        }
+        $alt = rtrim(implode(', ', $clauses), " ,;:");
+        $alt = $alt !== '' ? $alt : $p;
+        if (mb_strlen($alt) > 200) {
+            $alt = mb_substr($alt, 0, 200);
+            $alt = preg_replace('/\s+\S*$/u', '', $alt) ?: $alt;   // trim a trailing partial word
+        }
+        return rtrim($alt, " ,;:");
     }
 
     /** A short title from a prompt — first clause, trimmed. */
