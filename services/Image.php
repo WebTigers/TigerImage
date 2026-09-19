@@ -24,6 +24,16 @@ class Tigerimage_Service_Image extends Tiger_Service_Service
     const MAX_N = 4;
 
     /**
+     * The optional generation knobs a caller may pass to generate() — the set we check against the
+     * live provider's honored params (TIGER-173). `prompt` is deliberately absent: it is required and
+     * every provider honors it, so it is never "ignored". The reference fields (reference_id/parent_id)
+     * and routing fields (action/module/…) are not generation knobs and are handled elsewhere.
+     */
+    const GENERATION_PARAMS = [
+        'negative', 'seed', 'size', 'n', 'quality', 'background', 'output_format', 'output_compression',
+    ];
+
+    /**
      * Can this install generate images right now, and with what?
      *
      * ALWAYS CALL THIS FIRST. An agent that promises a user an image and then discovers no provider is
@@ -121,6 +131,14 @@ class Tigerimage_Service_Image extends Tiger_Service_Service
             if (isset($params[$k]) && $params[$k] !== '') { $options[$k] = $params[$k]; }
         }
 
+        // Which of the caller's optional knobs does THIS live provider actually honor? The honored set
+        // is the authority the capability answer already reports — one adapter, one truth (TIGER-103).
+        // A param the caller passed but the provider drops (e.g. `negative` or `seed` on OpenAI's
+        // gpt-image) is silently ignored by the adapter; report it so the caller is not left believing
+        // a constraint is in force. It is informational only — the call still proceeds. Round-4 shipped
+        // a garbled sign because a `negative` prompt was dropped without notice.
+        $ignored = $this->_ignoredParams($params, $cap['params'] ?? []);
+
         // A reference image is named by ID, never uploaded through this call: the image is already in
         // our store, and making an agent round-trip base64 through the API would be slower, larger and
         // a way to smuggle arbitrary bytes past the size caps.
@@ -198,7 +216,50 @@ class Tigerimage_Service_Image extends Tiger_Service_Service
             // Told after every generation, so a loop can see its own budget shrinking rather than
             // discovering the ceiling by hitting it.
             'spend'    => $this->_spendSummary($orgId, $credentialId),
+            // The knobs the caller passed that this provider does not honor — structured, so an agent
+            // can act on it, not just read prose (empty when everything passed was honored).
+            'ignored_params' => $ignored,
         ], 'tigerimage.generated');
+
+        // And the same, as human/agent-readable info messages on the envelope — one per dropped knob.
+        // Informational, never an error: the images were still generated, just not under that constraint.
+        foreach ($ignored as $param) {
+            $this->_response->messages[] = new Tiger_Model_MessageObject(
+                $param . ' is not honored by ' . $resolved['provider'] . ' and was ignored.', 'info'
+            );
+        }
+    }
+
+    /**
+     * The optional knobs the caller supplied that the live provider does NOT honor.
+     *
+     * The honored names come from the provider's own adapter, via the capability answer's `params`
+     * (each entry has a `name`). When that set is empty or unavailable — an older core, or an adapter
+     * that predates `imageParams()` — we cannot know what is honored, so we warn about nothing rather
+     * than guess. Only knobs the caller actually passed (non-empty) are considered, and never `prompt`.
+     *
+     * @param  array $params        the caller's message
+     * @param  array $honoredParams the capability answer's `params` descriptors
+     * @return array<int,string>    the dropped knob names, in GENERATION_PARAMS order
+     */
+    protected function _ignoredParams(array $params, array $honoredParams)
+    {
+        $honored = [];
+        foreach ($honoredParams as $descriptor) {
+            $name = is_array($descriptor) ? ($descriptor['name'] ?? '') : '';
+            if ($name !== '') { $honored[] = (string) $name; }
+        }
+        // Unknown honored set → cannot judge → warn about nothing.
+        if (empty($honored)) { return []; }
+
+        $ignored = [];
+        foreach (self::GENERATION_PARAMS as $knob) {
+            $supplied = isset($params[$knob]) && $params[$knob] !== '' && $params[$knob] !== null;
+            if ($supplied && !in_array($knob, $honored, true)) {
+                $ignored[] = $knob;
+            }
+        }
+        return $ignored;
     }
 
     /**
