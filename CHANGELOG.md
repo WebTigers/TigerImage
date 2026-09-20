@@ -4,6 +4,15 @@ All notable changes to TigerImage are recorded here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versioning is SemVer with a `-beta` stability suffix
 while pre-1.0.
 
+## [1.3.2] — 2026-09-20
+
+### Changed
+
+- **Report provider-ignored generation params** (TIGER-173). `generate()` still produces the image, but
+  now appends an `info` message for each supplied knob a provider silently ignores (e.g. `negative` on
+  OpenAI) and returns a structured `ignored_params` array in the success payload — so a caller (or an
+  agent) learns the param had no effect instead of assuming it applied.
+
 ## [1.3.1] — 2026-09-18
 
 ### Fixed
