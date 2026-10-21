@@ -2,7 +2,7 @@
     "schema": "tiger.module/v1",
     "slug": "tigerimage",
     "name": "TigerImage",
-    "version": "1.3.2",
+    "version": "1.3.3",
     "description": "Image generation for any agent. Drives the Tiger provider adapters to turn a prompt into pictures, remembers how each one was made so it can be refined, and promotes the keepers into the Media Library. Gives a text-only assistant the ability to illustrate a page it just wrote.",
     "author": {
         "name": "WebTigers",
@@ -43,5 +43,5 @@
     "pricing": {
         "model": "free"
     },
-    "_notes": "Free, BSD-licensed first-party module. Generated images live in storage/tigerimage — OUTSIDE the module directory, because a module update renames the module dir away and deletes the backup (Tiger_Module_Installer), which would destroy anything stored inside it. See TIGER-101 for making purge remove that tree."
+    "_notes": "Free, BSD-licensed first-party module. Generated images live in storage/tigerimage \u2014 OUTSIDE the module directory, because a module update renames the module dir away and deletes the backup (Tiger_Module_Installer), which would destroy anything stored inside it. See TIGER-101 for making purge remove that tree."
 }
