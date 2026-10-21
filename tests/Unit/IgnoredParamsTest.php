@@ -128,7 +128,7 @@ final class IgnoredParamsImageService extends Tigerimage_Service_Image
         ['name' => 'background'], ['name' => 'output_format'], ['name' => 'output_compression'],
     ];
 
-    protected function _isAdmin($resource = null, $privilege = null) { return true; }
+    protected function _isAllowed($privilege, $resource = null) { return true; }
     protected function _capability()
     {
         return ['available' => true, 'provider' => 'openai', 'model' => 'gpt-image-1', 'params' => $this->honoredParams];

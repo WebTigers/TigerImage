@@ -95,7 +95,7 @@ class Tigerimage_Service_Image extends Tiger_Service_Service
      */
     public function generate(array $params): void
     {
-        if (!$this->_isAdmin()) { $this->_error('core.api.error.not_allowed'); return; }
+        if (!$this->_isAllowed('generate')) { $this->_error('core.api.error.not_allowed'); return; }
 
         $prompt = trim((string) ($params['prompt'] ?? ''));
         if ($prompt === '') { $this->_error('tigerimage.error.prompt_required'); return; }
@@ -272,7 +272,7 @@ class Tigerimage_Service_Image extends Tiger_Service_Service
      */
     public function refine(array $params): void
     {
-        if (!$this->_isAdmin()) { $this->_error('core.api.error.not_allowed'); return; }
+        if (!$this->_isAllowed('refine')) { $this->_error('core.api.error.not_allowed'); return; }
 
         $id  = trim((string) ($params['image_id'] ?? ''));
         $m   = new Tigerimage_Model_Image();
@@ -292,7 +292,7 @@ class Tigerimage_Service_Image extends Tiger_Service_Service
     /** Recent images for this org, newest first, with their parameters. */
     public function listImages(array $params): void
     {
-        if (!$this->_isAdmin()) { $this->_error('core.api.error.not_allowed'); return; }
+        if (!$this->_isAllowed('listImages')) { $this->_error('core.api.error.not_allowed'); return; }
         $limit = max(1, min(200, (int) ($params['limit'] ?? 60)));
         $rows  = (new Tigerimage_Model_Image())->recentForOrg($this->_orgId(), $limit);
 
@@ -304,7 +304,7 @@ class Tigerimage_Service_Image extends Tiger_Service_Service
     /** One image, with its full refinement chain so an agent can see how it got here. */
     public function get(array $params): void
     {
-        if (!$this->_isAdmin()) { $this->_error('core.api.error.not_allowed'); return; }
+        if (!$this->_isAllowed('get')) { $this->_error('core.api.error.not_allowed'); return; }
         $m   = new Tigerimage_Model_Image();
         $row = $m->byId(trim((string) ($params['image_id'] ?? '')), $this->_orgId());
         if (!$row) { $this->_error('tigerimage.error.no_such_image'); return; }
@@ -323,7 +323,7 @@ class Tigerimage_Service_Image extends Tiger_Service_Service
      */
     public function promote(array $params): void
     {
-        if (!$this->_isAdmin()) { $this->_error('core.api.error.not_allowed'); return; }
+        if (!$this->_isAllowed('promote')) { $this->_error('core.api.error.not_allowed'); return; }
         $id = trim((string) ($params['image_id'] ?? ''));
         if ($id === '') { $this->_error('tigerimage.error.no_such_image'); return; }
 
@@ -342,7 +342,7 @@ class Tigerimage_Service_Image extends Tiger_Service_Service
     /** Discard an image. Its refinements are re-parented, not deleted. */
     public function discard(array $params): void
     {
-        if (!$this->_isAdmin()) { $this->_error('core.api.error.not_allowed'); return; }
+        if (!$this->_isAllowed('discard')) { $this->_error('core.api.error.not_allowed'); return; }
         try {
             $r = (new Tigerimage_Service_Library())->discard(trim((string) ($params['image_id'] ?? '')), $this->_orgId());
         } catch (Throwable $e) {

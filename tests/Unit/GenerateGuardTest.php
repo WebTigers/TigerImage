@@ -170,7 +170,7 @@ final class GuardableImageService extends Tigerimage_Service_Image
     public ?string $checkedCredential = null;
     public ?string $storedCredential = null;
 
-    protected function _isAdmin($resource = null, $privilege = null) { return true; }
+    protected function _isAllowed($privilege, $resource = null) { return true; }
     protected function _capability() { return ['available' => true, 'provider' => 'openai', 'model' => 'gpt-image-1']; }
     protected function _apiKey(array $resolved) { return 'test-key'; }
 
