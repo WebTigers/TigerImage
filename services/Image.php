@@ -109,7 +109,13 @@ class Tigerimage_Service_Image extends Tiger_Service_Service
             return;
         }
 
-        $resolved = Tigerimage_Model_Provider::resolve();
+        // Resolved for the CALLER's org — its own provider + key, never another org's or the install's
+        // (TIGER-511). Null only if the configuration changed since the capability check above.
+        $resolved = Tigerimage_Model_Provider::resolve($this->_orgId());
+        if ($resolved === null) {
+            $this->_error('tigerimage.error.no_image_provider');
+            return;
+        }
         // The REGISTERED image adapter, not Factory::make() — make() returns the core text adapter,
         // which by design cannot draw (TIGER-103).
         $adapter  = Tiger_Agent_Provider_Factory::imageAdapter($resolved['provider']);
@@ -363,7 +369,7 @@ class Tigerimage_Service_Image extends Tiger_Service_Service
     /** @return array the capability answer */
     protected function _capability()
     {
-        return Tigerimage_Model_Provider::capability();
+        return Tigerimage_Model_Provider::capability($this->_orgId());
     }
 
     /** @return string the provider key */

@@ -24,12 +24,19 @@ Free, BSD-3, first-party.
   provider *actually used* — the size it snapped to, the seed it picked, the prompt it rewrote.
   Without that echo a refinement cannot reproduce its parent.
 - **Lineage** links a refinement to what it came from, so a chain is navigable rather than a pile.
+- **The provider and key are the org's own.** Each org draws with its own TigerImage settings
+  (`tigerimage.provider` / `model` / `api_key_enc`, saved at the org) or, failing those, its own AI
+  agent (`Tiger_Agent::forOrg()`) when that provider can draw. An org with neither cannot draw — it
+  never borrows another org's key or the install's. Only the install's own org also reads the
+  install-wide settings, because those are its own.
 
 ## Installing
 
-Needs **tiger-core 1.5.21+**. 1.5.19 made image adapters a lazy registry; 1.5.20 made module
-purge remove `storage/tigerimage/`, so deleting the module actually deletes the images; 1.5.21 put
-`credential_id` on the identity, which is what makes a per-token spend cap enforceable.
+Needs **tiger-core 1.60.0+** — `Tiger_Agent::forOrg()` and `Tiger_Model_Config::orgOwnValue()` are how
+an org's own key is resolved. Earlier floors still apply: 1.5.19 made image adapters a lazy registry;
+1.5.20 made module purge remove `storage/tigerimage/`, so deleting the module actually deletes the
+images; 1.5.21 put `credential_id` on the identity, which is what makes a per-token spend cap
+enforceable.
 
 App modules are **opt-in**: dropping the files in and running the migration is not enough — the module
 stays inert until it has an `active=1` row, because `Resource_Modules` strips inactive modules from the

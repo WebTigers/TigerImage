@@ -27,7 +27,9 @@ class Tigerimage_StudioController extends Tiger_Controller_Admin_Action
     /** The grid. Data is fetched by the page's JS from /api, so this action only sets up the shell. */
     public function indexAction()
     {
-        $cap = Tigerimage_Model_Provider::capability();
+        // Resolved for the signed-in org explicitly — its own agent/key, never the install's (TIGER-511).
+        $identity = Zend_Auth::getInstance()->getIdentity();
+        $cap = Tigerimage_Model_Provider::capability((string) ($identity->org_id ?? ''));
         $this->view->capability = $cap;
 
         // A diagnostic when the module is installed but cannot draw — so an operator reading the system
@@ -40,7 +42,6 @@ class Tigerimage_StudioController extends Tiger_Controller_Admin_Action
         // The budget gauge (TIGER-105), rendered server-side so it is right on first paint rather
         // than appearing a moment later. A page view is always a session login — it has no
         // credential — so the org ceiling is the only one that can bind here.
-        $identity = Zend_Auth::getInstance()->getIdentity();
         $this->view->spend = Tigerimage_Model_Spend::summary((string) ($identity->org_id ?? ''));
 
         $this->view->headTitle($this->view->t('tigerimage.studio.title'));

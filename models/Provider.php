@@ -14,6 +14,13 @@
  *      generation would fail at call time with a confusing provider error; better to report honestly
  *      that nothing is configured.
  *
+ * AI KEYS ARE ORG-LEVEL ONLY (TIGER-511). Everything here is resolved for ONE named org — the caller's
+ * org on a request, the image row's org for anything that runs without a signed-in org. Both tiers are
+ * that org's own: the org's agent comes from Tiger_Agent::forOrg() (never the signed-in-org facade, never
+ * a platform/install agent), and TigerImage's own provider/model/key are read from that org's own config
+ * rows. Only the INSTALL org also reads the install-wide tier (global row, else ini) — those settings are
+ * its own. No org means no provider: an org with no key of its own cannot draw, it never borrows one.
+ *
  * @api
  */
 class Tigerimage_Model_Provider
@@ -23,56 +30,69 @@ class Tigerimage_Model_Provider
     const CFG_KEY_ENC  = 'tigerimage.api_key_enc';
 
     /**
-     * The resolved image provider, or null when nothing on this install can draw.
+     * The resolved image provider for an org, or null when nothing that org owns can draw.
      *
-     * @return array{provider:string,model:string,source:string}|null
+     * @param  string|null $orgId the org to resolve for; null = the signed-in org (Tiger_Model_Table::org()).
+     *                            Code with no signed-in org (a job, a sweep) passes the row's org.
+     * @return array{provider:string,model:string,source:string,org_id:string}|null
      */
-    public static function resolve()
+    public static function resolve($orgId = null)
     {
-        $own      = trim((string) self::_config(self::CFG_PROVIDER));
-        $ownModel = trim((string) self::_config(self::CFG_MODEL));
+        $orgId = self::_org($orgId);
+        if ($orgId === '') {
+            return null;   // no org, no provider — never an install/platform fallback
+        }
+
+        $own      = trim((string) self::_setting($orgId, self::CFG_PROVIDER));
+        $ownModel = trim((string) self::_setting($orgId, self::CFG_MODEL));
 
         if ($own !== '') {
             $model = $ownModel !== '' ? $ownModel : self::_firstDrawingModel($own);
             if ($model !== '' && Tiger_Agent_Provider_Factory::canGenerateImages($own, $model)) {
-                return ['provider' => $own, 'model' => $model, 'source' => 'tigerimage'];
+                return ['provider' => $own, 'model' => $model, 'source' => 'tigerimage', 'org_id' => $orgId];
             }
             // Configured but not capable — say so rather than silently falling through to the agent's,
             // which would hide a misconfiguration behind a working-looking install.
             return null;
         }
 
-        if (class_exists('Tiger_Agent')) {
-            $p = Tiger_Agent::provider();
-            $m = Tiger_Agent::model();
+        $agent = self::_agent($orgId);
+        if ($agent !== null) {
+            $p = (string) $agent['provider'];
+            $m = (string) $agent['model'];
             // The agent picks a provider + key for TEXT. Images reuse the SAME provider + key but need
             // a drawing model: use the agent's model if it can draw, else this provider's default image
             // model. So setting the agent to OpenAI (or Gemini) with a key is enough to draw — no
             // second TigerImage provider config required (TIGER-147).
             $model = ($m !== '' && Tiger_Agent_Provider_Factory::canGenerateImages($p, $m)) ? $m : self::_firstDrawingModel($p);
             if ($model !== '' && Tiger_Agent_Provider_Factory::canGenerateImages($p, $model)) {
-                return ['provider' => $p, 'model' => $model, 'source' => 'agent'];
+                return ['provider' => $p, 'model' => $model, 'source' => 'agent', 'org_id' => $orgId];
             }
         }
         return null;
     }
 
     /**
-     * The key for the resolved provider.
+     * The key for the resolved provider — the RESOLVED org's own key, never anyone else's.
      *
      * Falls back to the agent's key ONLY when the provider resolved to the agent's — a key is
      * provider-specific, and handing OpenAI an Anthropic key is a confusing 401 rather than a
      * useful error.
      *
-     * @param  array $resolved from resolve()
+     * @param  array $resolved from resolve() (carries the org it was resolved for)
      * @return string '' when unset or unreadable
      */
     public static function apiKey(array $resolved)
     {
-        if (($resolved['source'] ?? '') === 'agent' && class_exists('Tiger_Agent')) {
-            return (string) Tiger_Agent::apiKey();
+        $orgId = (string) ($resolved['org_id'] ?? '');
+        if ($orgId === '') {
+            return '';
         }
-        $blob = (string) self::_config(self::CFG_KEY_ENC);
+        if (($resolved['source'] ?? '') === 'agent') {
+            $agent = self::_agent($orgId);
+            return $agent !== null ? (string) $agent['api_key'] : '';
+        }
+        $blob = (string) self::_setting($orgId, self::CFG_KEY_ENC);
         if ($blob === '') { return ''; }
         try { return (string) Tiger_Crypto::decrypt($blob); } catch (Throwable $e) { return ''; }
     }
@@ -83,12 +103,13 @@ class Tigerimage_Model_Provider
      * Failing at call time after saying "sure, I'll add a picture" is the bad outcome — so this is
      * answerable without generating anything.
      *
+     * @param  string|null $orgId the org asking; null = the signed-in org
      * @return array {available: bool, reason?: string, provider?: string, model?: string, providers: string[]}
      */
-    public static function capability()
+    public static function capability($orgId = null)
     {
         $providers = Tiger_Agent_Provider_Factory::imageProviders();
-        $resolved  = self::resolve();
+        $resolved  = self::resolve($orgId);
 
         if (!$resolved) {
             return [
@@ -162,15 +183,50 @@ class Tigerimage_Model_Provider
         return '';
     }
 
-    /** Read a dotted config key from the resolved config. */
-    protected static function _config($key, $default = '')
+    /** The org to resolve for: the one named, else the signed-in org ('' = none). */
+    protected static function _org($orgId)
     {
-        if (!Zend_Registry::isRegistered('Zend_Config')) { return $default; }
-        $val = Zend_Registry::get('Zend_Config');
-        foreach (explode('.', $key) as $part) {
-            if (!is_object($val) || $val->get($part) === null) { return $default; }
-            $val = $val->get($part);
+        if ($orgId !== null) {
+            return (string) $orgId;
         }
-        return is_scalar($val) ? (string) $val : $default;
+        $org = Tiger_Model_Table::org();
+        return $org === null ? '' : (string) $org;
+    }
+
+    /**
+     * The org's OWN agent (Tiger_Agent::forOrg — TIGER-511), or null when it has none. Never the
+     * signed-in-org facade: the org being resolved for is named, so a job running with no session (or
+     * an admin of one org) can never pick up another org's — or the install's — key.
+     *
+     * @param  string $orgId
+     * @return array|null
+     */
+    protected static function _agent($orgId)
+    {
+        if (!class_exists('Tiger_Agent') || !method_exists('Tiger_Agent', 'forOrg')) {
+            return null;
+        }
+        try {
+            return Tiger_Agent::forOrg((string) $orgId);
+        } catch (Throwable $e) {
+            return null;
+        }
+    }
+
+    /**
+     * One of TigerImage's own settings for ONE org — that org's own row only. The install org also reads
+     * the install-wide tier (global row, else ini): the install's settings are its own. The merged
+     * Zend_Config is never consulted, because it folds the install-wide tier under every org (TIGER-511).
+     *
+     * @param  string $orgId
+     * @param  string $key
+     * @return string '' when the org set none
+     */
+    protected static function _setting($orgId, $key)
+    {
+        $v = Tiger_Model_Org::isInstallOrg($orgId)
+            ? Tiger_Model_Config::orgValue($orgId, $key, '')
+            : Tiger_Model_Config::orgOwnValue($orgId, $key, '');
+        return is_scalar($v) ? (string) $v : '';
     }
 }

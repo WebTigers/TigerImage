@@ -27,9 +27,12 @@ final class IgnoredParamsTest extends TestCase
 
     private function boot(): IgnoredParamsImageService
     {
+        // org-1 is the install org here, so the install-wide tigerimage.* settings are its own (TIGER-511).
         Zend_Registry::set('Zend_Config', new Zend_Config([
             'tigerimage' => ['provider' => 'openai', 'model' => 'gpt-image-1'],
+            'tiger'      => ['site' => ['org_id' => 'org-1']],
         ]));
+        Tiger_Model_Config::resetCache();
         Tiger_Agent_Provider_Factory::registerImageAdapter('openai', new IgnoredParamsSpyAdapter());
         return new IgnoredParamsImageService();
     }
