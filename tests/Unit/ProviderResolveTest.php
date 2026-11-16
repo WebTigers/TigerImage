@@ -24,8 +24,15 @@ final class ProviderResolveTest extends TestCase
      * Using the REAL adapters rather than fakes means these tests also prove the registration path
      * the Bootstrap relies on.
      */
+    /** The install's own org (tiger.site.org_id) — the one org that also reads the install-wide tier. */
+    private const INSTALL = 'org-install';
+
+    /** Another org on the same install, with no settings of its own unless a test gives it some. */
+    private const OTHER = 'org-other';
+
     protected function setUp(): void
     {
+        $this->config();   // a crypto key is in place before any test encrypts its fixtures
         Tiger_Agent_Provider_Factory::clearImageAdapters();
         Tiger_Agent_Provider_Factory::registerImageAdapter('openai', new Tigerimage_Adapter_OpenAi());
         Tiger_Agent_Provider_Factory::registerImageAdapter('gemini', new Tigerimage_Adapter_Gemini());
@@ -35,6 +42,29 @@ final class ProviderResolveTest extends TestCase
     {
         Tiger_Agent_Provider_Factory::clearImageAdapters();
         if (Zend_Registry::isRegistered('Zend_Config')) { Zend_Registry::set('Zend_Config', null); }
+        self::resetTiers();
+    }
+
+    /** Forget every cached config tier + memoized agent so no test sees another's state. */
+    private static function resetTiers(): void
+    {
+        Tiger_Model_Config::setIniBase(null);
+        Tiger_Model_Config::resetCache();
+        Tiger_Agent::reset();
+    }
+
+    /**
+     * Give one org its OWN config rows, as the per-org settings forms write them. The unit suite has no
+     * DB, so this seeds Tiger_Model_Config's per-request tier cache — exactly what a read of that org's
+     * rows would have cached.
+     */
+    private static function orgRows(string $orgId, array $rows): void
+    {
+        $prop  = new ReflectionProperty(Tiger_Model_Config::class, '_tiers');
+        $tiers = $prop->getValue();
+        $tiers[Tiger_Model_Config::SCOPE_ORG . '|' . $orgId] = $rows;
+        $prop->setValue(null, $tiers);
+        Tiger_Agent::reset();
     }
 
     /** Without the module's registration, core reports no capability at all — the loose-coupling test. */
@@ -44,26 +74,119 @@ final class ProviderResolveTest extends TestCase
         Tiger_Agent_Provider_Factory::clearImageAdapters();
         $this->config(['provider' => 'openai', 'model' => 'gpt-image-1']);
 
-        $this->assertNull(Tigerimage_Model_Provider::resolve(),
+        $this->assertNull(Tigerimage_Model_Provider::resolve(self::INSTALL),
             'with no adapter registered, even a correctly configured provider cannot draw');
-        $cap = Tigerimage_Model_Provider::capability();
+        $cap = Tigerimage_Model_Provider::capability(self::INSTALL);
         $this->assertFalse($cap['available']);
         $this->assertSame([], $cap['providers']);
     }
 
     private function config(array $tigerimage = [], array $agent = []): void
     {
+        // The install-wide tier: the install org's own settings (TIGER-511). Every other org must ignore it.
         Zend_Registry::set('Zend_Config', new Zend_Config([
             'tigerimage' => $tigerimage,
-            'tiger'      => ['agent' => $agent],
+            'tiger'      => [
+                'agent'  => $agent,
+                'site'   => ['org_id' => self::INSTALL],
+                'crypto' => ['key' => base64_encode(str_repeat('k', SODIUM_CRYPTO_SECRETBOX_KEYBYTES))],
+            ],
         ]));
+        self::resetTiers();
+    }
+
+    // ----- TIGER-511: AI keys are org-level only ------------------------------------------------
+
+    /**
+     * The leak this closes: the install has a drawing agent AND a TigerImage key configured install-wide,
+     * and a DIFFERENT org — with nothing of its own — asks. It must get nothing: no provider, no key,
+     * reason no_image_provider. Before TIGER-511 every org drew on the install's key.
+     */
+    #[Test]
+    public function another_org_never_draws_on_the_install_agent_or_key(): void
+    {
+        $this->config(
+            ['provider' => 'openai', 'model' => 'gpt-image-1', 'api_key_enc' => Tiger_Crypto::encrypt('sk-install-image')],
+            ['provider' => 'openai', 'model' => 'gpt-image-1', 'enabled' => '1', 'api_key_enc' => Tiger_Crypto::encrypt('sk-install-agent')]
+        );
+        // The install org itself still resolves — those are its own settings.
+        $this->assertSame('sk-install-image', Tigerimage_Model_Provider::apiKey(Tigerimage_Model_Provider::resolve(self::INSTALL)));
+
+        $this->assertNull(Tigerimage_Model_Provider::resolve(self::OTHER),
+            'an org with no settings of its own must not inherit the install provider');
+        $cap = Tigerimage_Model_Provider::capability(self::OTHER);
+        $this->assertFalse($cap['available']);
+        $this->assertSame('no_image_provider', $cap['reason']);
+    }
+
+    /** Same, when the install's only drawing route is its AGENT (no TigerImage config at all). */
+    #[Test]
+    public function another_org_never_reuses_the_install_agent(): void
+    {
+        $this->config([], ['provider' => 'openai', 'model' => 'gpt-4.1', 'enabled' => '1',
+                           'api_key_enc' => Tiger_Crypto::encrypt('sk-install-agent')]);
+        $install = Tigerimage_Model_Provider::resolve(self::INSTALL);
+        $this->assertSame('agent', $install['source']);
+        $this->assertSame('sk-install-agent', Tigerimage_Model_Provider::apiKey($install));
+
+        $this->assertNull(Tigerimage_Model_Provider::resolve(self::OTHER));
+        // Even a resolved shape naming the other org (a caller that built one by hand) yields no key.
+        $this->assertSame('', Tigerimage_Model_Provider::apiKey(['source' => 'agent', 'provider' => 'openai', 'org_id' => self::OTHER]));
+        $this->assertSame('', Tigerimage_Model_Provider::apiKey(['source' => 'agent', 'provider' => 'openai']),
+            'a resolution with no org has no key');
+    }
+
+    /** An org with its OWN agent draws with its own key — and only its own. */
+    #[Test]
+    public function an_org_draws_with_its_own_agent_key(): void
+    {
+        $this->config([], ['provider' => 'openai', 'model' => 'gpt-4.1', 'enabled' => '1',
+                           'api_key_enc' => Tiger_Crypto::encrypt('sk-install-agent')]);
+        self::orgRows(self::OTHER, [
+            'tiger.agent.provider'    => 'openai',
+            'tiger.agent.model'       => 'gpt-4.1',
+            'tiger.agent.enabled'     => '1',
+            'tiger.agent.api_key_enc' => Tiger_Crypto::encrypt('sk-other-agent'),
+        ]);
+
+        $r = Tigerimage_Model_Provider::resolve(self::OTHER);
+        $this->assertNotNull($r);
+        $this->assertSame('agent', $r['source']);
+        $this->assertSame(self::OTHER, $r['org_id']);
+        $this->assertSame('sk-other-agent', Tigerimage_Model_Provider::apiKey($r));
+        $this->assertTrue(Tigerimage_Model_Provider::capability(self::OTHER)['available']);
+    }
+
+    /** An org with its OWN TigerImage provider + key uses those, not the install's. */
+    #[Test]
+    public function an_org_draws_with_its_own_tigerimage_key(): void
+    {
+        $this->config(['provider' => 'openai', 'model' => 'gpt-image-1', 'api_key_enc' => Tiger_Crypto::encrypt('sk-install-image')]);
+        self::orgRows(self::OTHER, [
+            'tigerimage.provider'    => 'openai',
+            'tigerimage.model'       => 'gpt-image-1',
+            'tigerimage.api_key_enc' => Tiger_Crypto::encrypt('sk-other-image'),
+        ]);
+
+        $r = Tigerimage_Model_Provider::resolve(self::OTHER);
+        $this->assertSame('tigerimage', $r['source']);
+        $this->assertSame('sk-other-image', Tigerimage_Model_Provider::apiKey($r));
+    }
+
+    /** No org at all (a job with no session, a guest) resolves to nothing — never the install's. */
+    #[Test]
+    public function no_org_resolves_to_nothing(): void
+    {
+        $this->config(['provider' => 'openai', 'model' => 'gpt-image-1', 'api_key_enc' => Tiger_Crypto::encrypt('sk-install-image')]);
+        $this->assertNull(Tigerimage_Model_Provider::resolve(''));
+        $this->assertNull(Tigerimage_Model_Provider::resolve(), 'no signed-in org means no provider');
     }
 
     #[Test]
     public function an_explicit_drawing_provider_wins(): void
     {
         $this->config(['provider' => 'openai', 'model' => 'gpt-image-1']);
-        $r = Tigerimage_Model_Provider::resolve();
+        $r = Tigerimage_Model_Provider::resolve(self::INSTALL);
         $this->assertSame('openai', $r['provider']);
         $this->assertSame('gpt-image-1', $r['model']);
         $this->assertSame('tigerimage', $r['source']);
@@ -77,7 +200,7 @@ final class ProviderResolveTest extends TestCase
     public function a_configured_but_incapable_provider_resolves_to_nothing(): void
     {
         $this->config(['provider' => 'anthropic', 'model' => 'claude-opus-5']);
-        $this->assertNull(Tigerimage_Model_Provider::resolve());
+        $this->assertNull(Tigerimage_Model_Provider::resolve(self::INSTALL));
     }
 
     /**
@@ -95,7 +218,7 @@ final class ProviderResolveTest extends TestCase
             ['provider' => 'openai',    'model' => 'gpt-image-1']      // agent: CAN draw
         );
         $this->assertNull(
-            Tigerimage_Model_Provider::resolve(),
+            Tigerimage_Model_Provider::resolve(self::INSTALL),
             'an explicit but incapable setting must surface as unconfigured, not silently use the agent'
         );
     }
@@ -109,7 +232,7 @@ final class ProviderResolveTest extends TestCase
     public function the_agent_provider_and_key_satisfy_images_even_on_a_text_model(): void
     {
         $this->config([], ['provider' => 'openai', 'model' => 'gpt-4.1']);   // agent: OpenAI, a TEXT model
-        $r = Tigerimage_Model_Provider::resolve();
+        $r = Tigerimage_Model_Provider::resolve(self::INSTALL);
         $this->assertNotNull($r, 'OpenAI can draw, so the agent provider must satisfy images');
         $this->assertSame('openai', $r['provider']);
         $this->assertSame('agent', $r['source'], 'reuses the agent provider + key');
@@ -119,7 +242,7 @@ final class ProviderResolveTest extends TestCase
         // No key set here, so capability is not yet available — but the reason has shifted from
         // "nothing can draw" to "a provider is recognized, add its key" (before the wire it was
         // no_image_provider). That shift IS the fix.
-        $cap = Tigerimage_Model_Provider::capability();
+        $cap = Tigerimage_Model_Provider::capability(self::INSTALL);
         $this->assertFalse($cap['available']);
         $this->assertSame('no_api_key', $cap['reason'], 'the agent provider is recognized as image-capable; only the key is missing');
         $this->assertStringContainsString('agent settings', $cap['detail']);
@@ -130,14 +253,14 @@ final class ProviderResolveTest extends TestCase
     public function a_non_drawing_agent_provider_still_cannot_draw(): void
     {
         $this->config([], ['provider' => 'anthropic', 'model' => 'claude-opus-5']);
-        $this->assertNull(Tigerimage_Model_Provider::resolve());
+        $this->assertNull(Tigerimage_Model_Provider::resolve(self::INSTALL));
     }
 
     #[Test]
     public function nothing_configured_and_no_capable_agent_is_unavailable(): void
     {
         $this->config([], []);
-        $cap = Tigerimage_Model_Provider::capability();
+        $cap = Tigerimage_Model_Provider::capability(self::INSTALL);
         $this->assertFalse($cap['available']);
         $this->assertSame('no_image_provider', $cap['reason']);
         // the answer must be actionable — name what WOULD work
@@ -150,7 +273,7 @@ final class ProviderResolveTest extends TestCase
     public function a_claude_install_reports_unavailable_rather_than_failing_later(): void
     {
         $this->config([], ['provider' => 'anthropic', 'model' => 'claude-opus-5']);
-        $cap = Tigerimage_Model_Provider::capability();
+        $cap = Tigerimage_Model_Provider::capability(self::INSTALL);
 
         $this->assertFalse($cap['available'], 'Claude cannot draw — this is the case the module exists for');
         $this->assertSame('no_image_provider', $cap['reason']);
@@ -161,7 +284,7 @@ final class ProviderResolveTest extends TestCase
     public function a_configured_provider_with_no_key_is_a_different_reason(): void
     {
         $this->config(['provider' => 'openai', 'model' => 'gpt-image-1']);
-        $cap = Tigerimage_Model_Provider::capability();
+        $cap = Tigerimage_Model_Provider::capability(self::INSTALL);
 
         $this->assertFalse($cap['available']);
         // distinguishable from no_image_provider: the fix is a key, not a provider

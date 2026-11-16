@@ -18,14 +18,18 @@ Not every AI provider generates images. **Claude cannot**, which is the case thi
 an Anthropic install TigerImage reports itself unavailable, with the reason, *before* an agent promises
 anyone a picture. Today the image-capable providers are **OpenAI** and **Google Gemini**.
 
-If you leave the provider unset, TigerImage uses the site's agent provider when that provider can draw.
-Set it explicitly when your chat agent and your image generator should differ:
+If you leave the provider unset, TigerImage uses your organisation's AI agent provider when that provider
+can draw. Set it explicitly when your chat agent and your image generator should differ:
 
 | Setting | What it does |
 |---|---|
-| `tigerimage.provider` | `openai` or `gemini`. Unset = use the site's agent provider if it can draw. |
+| `tigerimage.provider` | `openai` or `gemini`. Unset = use your organisation's agent provider if it can draw. |
 | `tigerimage.model` | The image model, e.g. `gpt-image-1`. |
-| `tigerimage.api_key_enc` | The provider key, encrypted. Unset = reuse the agent's key. |
+| `tigerimage.api_key_enc` | The provider key, encrypted. Unset = reuse your organisation's agent key. |
+
+These settings, and the agent they fall back to, belong to one organisation. On a site with several
+organisations each one draws with its own key; an organisation that has set up neither cannot generate
+images — it never uses another organisation's key or the site's.
 
 ## 3. Confirm it is available
 

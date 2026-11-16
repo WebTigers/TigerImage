@@ -4,6 +4,19 @@ All notable changes to TigerImage are recorded here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versioning is SemVer with a `-beta` stability suffix
 while pre-1.0.
 
+## [1.4.0] — 2026-11-16
+
+### Changed
+
+- **AI keys are org-level only** (TIGER-511). The image provider, model and key are resolved for one
+  named org — the caller's on a request — and never fall back to the install. The agent route uses
+  `Tiger_Agent::forOrg($orgId)` instead of the signed-in-org facade, and TigerImage's own
+  `tigerimage.*` settings are read from that org's own config rows; only the install's own org also
+  reads the install-wide tier. Previously every org on a multi-org install drew on the install's key.
+  `Tigerimage_Model_Provider::resolve()` / `capability()` take an optional `$orgId` (default: the
+  signed-in org), and a resolution carries the `org_id` its key belongs to.
+- Requires tiger-core **1.60.0**.
+
 ## [1.3.2] — 2026-09-20
 
 ### Changed
